@@ -1,0 +1,41 @@
+{
+  "id": "easy",
+  "N": 5,
+  "map": [
+    [1, 1, 0, 0, 2],
+    [1, 1, 1, 2, 2],
+    [3, 3, 1, 2, 4],
+    [3, 3, 3, 3, 4],
+    [3, 3, 4, 4, 4]
+  ],
+  "rooms": [
+    { "name": "Library", "fill": "#2E5CB8", "dark": "#1A3A7A" },
+    { "name": "Ballroom", "fill": "#E74C3C", "dark": "#A93226" },
+    { "name": "Kitchen", "fill": "#F39C12", "dark": "#B8740F" },
+    { "name": "Study", "fill": "#9B59B6", "dark": "#6C3A6F" },
+    { "name": "Wine Cellar", "fill": "#1ABC9C", "dark": "#117A65" }
+  ],
+  "sol": [[0, 2], [1, 0], [2, 3], [3, 1], [4, 4]],
+  "murdererIdx": 4,
+  "starterIdx": 3,
+  "crimeSceneCell": [2, 4],
+  "clues": [
+    { "kind": "room", "room": "Library" },
+    { "kind": "rowParity", "parity": "even" },
+    { "kind": "colParity", "parity": "even" },
+    null,
+    { "kind": "colParity", "parity": "odd" }
+  ],
+  "doors": [
+    { "r": 2, "c": 3, "dir": "down" },
+    { "r": 3, "c": 3, "dir": "down" },
+    { "r": 1, "c": 0, "dir": "down" }
+  ],
+  "windows": [
+    { "r": 4, "c": 4, "side": "bottom" },
+    { "r": 0, "c": 4, "side": "right" },
+    { "r": 4, "c": 2, "side": "bottom" }
+  ],
+  "doorCells": ["1,0", "2,0", "2,3", "3,3", "4,3"],
+  "windowCells": ["0,4", "4,2", "4,4"]
+}

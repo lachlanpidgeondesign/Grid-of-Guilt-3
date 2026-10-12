@@ -1,0 +1,197 @@
+{
+  "N": 5,
+  "map": [
+    [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      2,
+      2,
+      0,
+      0,
+      1
+    ],
+    [
+      2,
+      2,
+      3,
+      3,
+      3
+    ],
+    [
+      2,
+      4,
+      4,
+      3,
+      3
+    ],
+    [
+      2,
+      4,
+      4,
+      3,
+      3
+    ]
+  ],
+  "rooms": [
+    {
+      "name": "Library",
+      "fill": "#2E5CB8",
+      "dark": "#1A3A7A"
+    },
+    {
+      "name": "Ballroom",
+      "fill": "#E74C3C",
+      "dark": "#A93226"
+    },
+    {
+      "name": "Kitchen",
+      "fill": "#F39C12",
+      "dark": "#B8740F"
+    },
+    {
+      "name": "Study",
+      "fill": "#9B59B6",
+      "dark": "#6C3A6F"
+    },
+    {
+      "name": "Wine Cellar",
+      "fill": "#1ABC9C",
+      "dark": "#117A65"
+    }
+  ],
+  "suspects": [
+    {
+      "name": "E. Crane",
+      "id": "EC"
+    },
+    {
+      "name": "L. Morrow",
+      "id": "LM"
+    },
+    {
+      "name": "R. Holt",
+      "id": "RH"
+    },
+    {
+      "name": "V. Dusk",
+      "id": "VD"
+    },
+    {
+      "name": "A. Wren",
+      "id": "AW"
+    }
+  ],
+  "sol": [
+    [
+      0,
+      2
+    ],
+    [
+      1,
+      4
+    ],
+    [
+      2,
+      0
+    ],
+    [
+      3,
+      3
+    ],
+    [
+      4,
+      1
+    ]
+  ],
+  "murdererIdx": 0,
+  "starterIdx": 4,
+  "crimeSceneCell": [
+    0,
+    0
+  ],
+  "clues": [
+    {
+      "type": "edge",
+      "text": "Was seen near the <em>outer walls</em> of the manor.",
+      "check": "(tr,tc)=>tr===0||tr===N-1||tc===0||tc===N-1"
+    },
+    {
+      "type": "near-door",
+      "text": "Was seen lingering near a <em>doorway</em>.",
+      "check": "(tr,tc)=>nearDoor===doorCells.has(`${tr},${tc}`)"
+    },
+    {
+      "type": "room",
+      "text": "Was confirmed in the <em>Kitchen</em> all evening.",
+      "check": "(tr,tc)=>map[tr][tc]===room"
+    },
+    {
+      "type": "near-window",
+      "text": "Was <em>nowhere near any windows</em>.",
+      "check": "(tr,tc)=>nearWindow===windowCells.has(`${tr},${tc}`)"
+    },
+    {
+      "type": "near-window",
+      "text": "Was <em>nowhere near any windows</em>.",
+      "check": "(tr,tc)=>nearWindow===windowCells.has(`${tr},${tc}`)"
+    }
+  ],
+  "orderedIdxs": [
+    1,
+    2,
+    3,
+    4,
+    0
+  ],
+  "doors": [
+    {
+      "r": 0,
+      "c": 0,
+      "dir": "down"
+    },
+    {
+      "r": 1,
+      "c": 4,
+      "dir": "down"
+    },
+    {
+      "r": 1,
+      "c": 1,
+      "dir": "right"
+    }
+  ],
+  "windows": [
+    {
+      "r": 4,
+      "c": 3,
+      "side": "bottom"
+    },
+    {
+      "r": 4,
+      "c": 0,
+      "side": "left"
+    },
+    {
+      "r": 4,
+      "c": 0,
+      "side": "bottom"
+    }
+  ],
+  "doorCells": [
+    "0,0",
+    "1,0",
+    "1,1",
+    "1,2",
+    "1,4",
+    "2,4"
+  ],
+  "windowCells": [
+    "4,0",
+    "4,3"
+  ]
+}
