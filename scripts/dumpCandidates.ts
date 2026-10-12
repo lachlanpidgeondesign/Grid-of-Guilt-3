@@ -16,7 +16,10 @@ const DIFFICULTIES: Array<{ difficulty: Difficulty; size: 5 | 7 | 9 }> = [
 ];
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const outDir = path.join(here, "candidates");
+// Output directory is configurable (first CLI arg, default "candidates") so a
+// sanity run can write to a side directory without clobbering the frozen source.
+const outDirName = process.argv[2] ?? "candidates";
+const outDir = path.join(here, outDirName);
 
 function serializeLevel(level: GeneratedLevel): string {
   return JSON.stringify(
@@ -58,7 +61,7 @@ async function main(): Promise<void> {
 
       saved += 1;
       await writeCandidate(difficulty, saved, level);
-      console.log(`[${difficulty}] saved candidate ${saved}/${TARGET_PER_DIFFICULTY} from attempt ${attempt} -> scripts/candidates/${difficulty}-${saved}.json`);
+      console.log(`[${difficulty}] saved candidate ${saved}/${TARGET_PER_DIFFICULTY} from attempt ${attempt} -> scripts/${outDirName}/${difficulty}-${saved}.json`);
     }
 
     if (saved < TARGET_PER_DIFFICULTY) {

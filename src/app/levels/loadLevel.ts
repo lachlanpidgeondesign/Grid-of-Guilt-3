@@ -2,6 +2,10 @@ import type { Door, GeneratedLevel, RoomPalette, WindowMarker } from "../generat
 import { suspectsForSize } from "../generator/suspects";
 import { clueText, toSolverClue, type ClueSpec } from "./clues";
 
+import easyData from "./easy.json";
+import mediumData from "./medium.json";
+import hardData from "./hard.json";
+
 export type LevelId = "easy" | "medium" | "hard";
 
 export interface FrozenLevelData {
@@ -20,10 +24,13 @@ export interface FrozenLevelData {
   windowCells: string[];
 }
 
-const LEVEL_URLS: Record<LevelId, string> = {
-  easy: new URL("./easy.json", import.meta.url).href,
-  medium: new URL("./medium.json", import.meta.url).href,
-  hard: new URL("./hard.json", import.meta.url).href,
+// The three frozen levels are bundled at build time via static JSON imports —
+// no runtime fetch, so the loader is synchronous and the data ships inside the
+// JS bundle.
+const FROZEN: Record<LevelId, FrozenLevelData> = {
+  easy: easyData as unknown as FrozenLevelData,
+  medium: mediumData as unknown as FrozenLevelData,
+  hard: hardData as unknown as FrozenLevelData,
 };
 
 function validateClues(data: FrozenLevelData): void {
@@ -101,11 +108,13 @@ export function levelClueText(data: FrozenLevelData): string[] {
   });
 }
 
-export async function loadLevel(id: LevelId): Promise<GeneratedLevel> {
-  const response = await fetch(LEVEL_URLS[id]);
-  if (!response.ok) {
-    throw new Error(`Failed to load level ${id}: ${response.status}`);
-  }
-  const data = (await response.json()) as FrozenLevelData;
-  return buildLevel(data);
+export function loadLevel(id: LevelId): GeneratedLevel {
+  return buildLevel(FROZEN[id]);
 }
+
+/** All three frozen levels, built once from the bundled JSON. */
+export const LEVELS: Record<LevelId, GeneratedLevel> = {
+  easy: buildLevel(FROZEN.easy),
+  medium: buildLevel(FROZEN.medium),
+  hard: buildLevel(FROZEN.hard),
+};

@@ -35,38 +35,38 @@ function getOtherCell(level: LevelShape | undefined, otherSuspectIdx: number): [
 export function clueText(spec: ClueSpec, level?: LevelShape, suspectNames?: string[]): string {
   switch (spec.kind) {
     case "room":
-      return `Was confirmed in the <em>${spec.room}</em> all evening.`;
+      return `must be in the <em>${spec.room}</em>`;
     case "corner":
-      return "Was spotted in <em>a corner</em> of the manor.";
+      return "must be in <em>a corner</em>";
     case "edge":
-      return "Was seen near the <em>outer walls</em> of the manor.";
+      return "must be along an <em>outer wall</em>";
     case "rowParity":
       return spec.parity === "odd"
-        ? "Witnesses placed them in an <em>odd-numbered row</em>."
-        : "Witnesses placed them in an <em>even-numbered row</em>.";
+        ? "must be in an <em>odd-numbered row</em>"
+        : "must be in an <em>even-numbered row</em>";
     case "colParity":
       return spec.parity === "odd"
-        ? "They were spotted in an <em>odd-numbered column</em>."
-        : "They were spotted in an <em>even-numbered column</em>.";
+        ? "must be in an <em>odd-numbered column</em>"
+        : "must be in an <em>even-numbered column</em>";
     case "door":
       return spec.near
-        ? "Was seen lingering near a <em>doorway</em>."
-        : "Was <em>far from any doorways</em>.";
+        ? "must be next to a <em>door</em>"
+        : "must not be next to a <em>door</em>";
     case "window":
       return spec.near
-        ? "Was spotted near a <em>window</em>."
-        : "Was <em>nowhere near any windows</em>.";
+        ? "must be next to a <em>window</em>"
+        : "must not be next to a <em>window</em>";
     case "row":
-      return `Witnesses placed them in <em>row ${spec.row}</em>.`;
+      return `must be in <em>row ${spec.row}</em>`;
     case "column":
-      return `They were spotted in <em>column ${spec.column}</em>.`;
+      return `must be in <em>column ${spec.column}</em>`;
     case "relative": {
       const otherName = asDisplayName(spec.otherSuspectIdx, suspectNames);
-      if (spec.relation === "leftOf") return `Was somewhere to the <em>left of ${otherName}</em>.`;
-      if (spec.relation === "rightOf") return `Was somewhere to the <em>right of ${otherName}</em>.`;
-      if (spec.relation === "above") return `Was somewhere <em>above ${otherName}</em>.`;
+      if (spec.relation === "leftOf") return `must be to the <em>left of ${otherName}</em>`;
+      if (spec.relation === "rightOf") return `must be to the <em>right of ${otherName}</em>`;
+      if (spec.relation === "above") return `must be <em>above ${otherName}</em>`;
       getOtherCell(level, spec.otherSuspectIdx);
-      return `Was somewhere <em>below ${otherName}</em>.`;
+      return `must be <em>below ${otherName}</em>`;
     }
   }
 }

@@ -8,7 +8,7 @@ Coordinates in this plan are **(row, col), 1-indexed**. Level JSON and code use 
 
 ---
 
-## [ ] Phase 0 — Branch and baseline
+## [x] Phase 0 — Branch and baseline
 
 Stage 1 (level files and clue model) was built before this plan existed. These files already exist: `src/app/levels/clues.ts`, `loadLevel.ts`, `easy.json`, `medium.json`, `hard.json`, `scripts/verifyLevels.ts`, `scripts/traceGrade.ts`, `scripts/dumpCandidates.ts`, `scripts/summarise.ts`, `scripts/candidates/`.
 
@@ -23,7 +23,9 @@ Stage 1 (level files and clue model) was built before this plan existed. These f
 
 ---
 
-## [ ] Phase 1 — Finish level data
+## [x] Phase 1 — Finish level data
+
+<!-- Done: crime cell blocked in psCreate/countSolutions/hint; loadLevel uses static JSON imports (sync, no fetch); plain "must be…" clue wording; verifyLevels prints from the loaded level; selftest at 6 assertions; generator still makes 8/8 candidates at 5/7/9. -->
 
 **1a. Grader: block the crime scene cell.** The game never lets a suspect be placed on the body's cell, but `psCreate` in `src/app/generator/constraintSolver.ts` builds candidates from clues alone and never excludes it. This is why Easy fails `gradeNoGuess`. Make the crime scene cell start with no candidates. Then check `countSolutions`, `nextHintFromBoard` and `reasonedLookahead` treat it as unplaceable too; fix any that don't. Update the copied `psCreate` in `scripts/traceGrade.ts` to match.
 
@@ -216,3 +218,9 @@ Rebuild for `/play/` only, as a new component (do not edit `HowToPlayModal.tsx`,
 - Share before a win shares the link; after a win shares the time.
 - Desktop two-column layout from 900px wide.
 - Tutorial keeps the name Eve (the 5×5 game cast also has an Eve).
+
+### From reviews
+- Phase 0 ❓ `typescript` added as a devDependency (not only `tsx`) — needed for the earlier type-check follow-up.
+- Phase 0 ❓ `scripts/candidates.zip` committed as a tracked binary alongside the JSON source.
+- Phase 1 ❓ Frozen level data isn't in the app bundle yet (tree-shaken until Phase 3/4 wires `LEVELS` in); bundling + no-fetch proven via esbuild for now.
+- Phase 1 ⚪ `clues.ts` "below" branch keeps a pre-existing no-op `getOtherCell(...)` call; could be dropped.

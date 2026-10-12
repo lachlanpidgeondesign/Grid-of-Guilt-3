@@ -6,39 +6,9 @@
 //
 // Pure logic only: no DOM, no React. New phases append assertions here.
 
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-
-// loadLevel() fetches its JSON by URL. Under Node there is no file: fetch, so
-// install a minimal shim that serves file: URLs from disk and defers anything
-// else to the platform fetch. This lets the self-test exercise loadLevel for
-// real (URL building, buildLevel, clue validation) rather than side-stepping it.
-const nativeFetch = globalThis.fetch?.bind(globalThis);
-globalThis.fetch = (async (input: any, init?: any) => {
-  const url = typeof input === "string" ? input : input?.url ?? String(input);
-  if (url.startsWith("file:")) {
-    try {
-      const body = await readFile(fileURLToPath(url), "utf8");
-      return {
-        ok: true,
-        status: 200,
-        json: async () => JSON.parse(body),
-        text: async () => body,
-      } as Response;
-    } catch (error) {
-      return {
-        ok: false,
-        status: 404,
-        json: async () => { throw error; },
-        text: async () => { throw error; },
-      } as Response;
-    }
-  }
-  if (!nativeFetch) throw new Error(`No fetch available for ${url}`);
-  return nativeFetch(input, init);
-}) as typeof fetch;
-
-import { loadLevel, type LevelId } from "../src/app/levels/loadLevel";
+import { loadLevel, LEVELS, type LevelId } from "../src/app/levels/loadLevel";
+import { countSolutions, gradeNoGuess } from "../src/app/generator/constraintSolver";
+import { suspectsForSize } from "../src/app/generator/suspects";
 
 // ── Tiny assertion harness ─────────────────────────────────────────────────
 type Check = () => void | Promise<void>;
@@ -56,13 +26,65 @@ function assert(cond: unknown, message: string): asserts cond {
 // ── Assertions ─────────────────────────────────────────────────────────────
 
 const LEVEL_SIZES: Record<LevelId, number> = { easy: 5, medium: 7, hard: 9 };
+const LEVEL_IDS: LevelId[] = ["easy", "medium", "hard"];
 
-test("all three levels load via loadLevel", async () => {
-  for (const id of ["easy", "medium", "hard"] as LevelId[]) {
-    const level = await loadLevel(id);
+test("all three levels load via loadLevel", () => {
+  for (const id of LEVEL_IDS) {
+    const level = loadLevel(id);
     assert(level.N === LEVEL_SIZES[id], `${id}: expected N=${LEVEL_SIZES[id]}, got ${level.N}`);
     assert(level.clues.length === level.N, `${id}: expected ${level.N} clues, got ${level.clues.length}`);
     assert(level.sol.length === level.N, `${id}: expected ${level.N} solution cells, got ${level.sol.length}`);
+  }
+});
+
+test("each level has exactly one solution", () => {
+  for (const id of LEVEL_IDS) {
+    const res = countSolutions(LEVELS[id], 2);
+    assert(!res.budgetExceeded, `${id}: solution count budget exceeded`);
+    assert(res.count === 1, `${id}: expected 1 solution, got ${res.count}`);
+  }
+});
+
+test("each level is solvable with no guessing", () => {
+  for (const id of LEVEL_IDS) {
+    const grade = gradeNoGuess(LEVELS[id]);
+    assert(grade.solvable, `${id}: gradeNoGuess returned not solvable`);
+  }
+});
+
+test("no clue text uses generator flavour words", () => {
+  const banned = ["all evening", "Witnesses", "spotted"];
+  for (const id of LEVEL_IDS) {
+    const level = LEVELS[id];
+    const names = suspectsForSize(level.N).map((s) => s.name);
+    level.clues.forEach((clue, si) => {
+      const text = clue.text;
+      if (!text) return; // starter has empty text
+      for (const word of banned) {
+        assert(!text.toLowerCase().includes(word.toLowerCase()), `${id}/${names[si]}: clue text contains "${word}": ${text}`);
+      }
+    });
+  }
+});
+
+test("every clue is true at its suspect's solution cell", () => {
+  for (const id of LEVEL_IDS) {
+    const level = LEVELS[id];
+    for (let si = 0; si < level.N; si++) {
+      const [row, col] = level.sol[si];
+      assert(level.clues[si].check(row, col), `${id}: clue ${si} is false at its solution cell (${row},${col})`);
+    }
+  }
+});
+
+test("the body cell holds no suspect in any solution", () => {
+  for (const id of LEVEL_IDS) {
+    const level = LEVELS[id];
+    const cs = level.crimeSceneCell;
+    if (!cs) continue;
+    for (let si = 0; si < level.N; si++) {
+      assert(!(level.sol[si][0] === cs[0] && level.sol[si][1] === cs[1]), `${id}: suspect ${si} sits on the body cell`);
+    }
   }
 });
 

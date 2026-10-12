@@ -49,8 +49,8 @@ interface PropState {
   contradiction: boolean;
 }
 
-function psCreate(level: Pick<GeneratedLevel, "N" | "map" | "clues">): PropState {
-  const { N, map, clues } = level;
+function psCreate(level: Pick<GeneratedLevel, "N" | "map" | "clues" | "crimeSceneCell">): PropState {
+  const { N, map, clues, crimeSceneCell } = level;
   const cellSuspects: Array<Array<Set<number>>> = [];
   for (let r = 0; r < N; r++) {
     const row: Array<Set<number>> = [];
@@ -61,11 +61,20 @@ function psCreate(level: Pick<GeneratedLevel, "N" | "map" | "clues">): PropState
     }
     cellSuspects.push(row);
   }
+  const state = Array.from({ length: N }, () => new Array<number>(N).fill(UNKNOWN));
+  // The body's cell can never hold a suspect: start it with no candidates and
+  // mark it empty, so row/column/room "single" deductions see it as
+  // unoccupiable from the very first pass.
+  if (crimeSceneCell) {
+    const [cr, cc] = crimeSceneCell;
+    cellSuspects[cr][cc].clear();
+    state[cr][cc] = EMPTY;
+  }
   return {
     N,
     map,
     cellSuspects,
-    state: Array.from({ length: N }, () => new Array<number>(N).fill(UNKNOWN)),
+    state,
     occupant: Array.from({ length: N }, () => new Array<number>(N).fill(-1)),
     suspectCell: new Array<[number, number] | null>(N).fill(null),
     order: [],
@@ -245,16 +254,15 @@ function gradeNoGuessTraced(level: GeneratedLevel): GradeResult {
     console.log(`  ${sname(si)}${tag}: ${fmtList(cells)}`);
   }
 
-  // Crime-scene treatment: psCreate/psAssign/psMakeQueen/psPropagate never
-  // reference crimeSceneCell, so the grader treats it as an ordinary cell.
+  // Crime-scene treatment: psCreate now clears the body cell's candidates and
+  // marks it EMPTY, so the grader treats it as unplaceable from the start.
   const cs = level.crimeSceneCell;
   if (cs) {
     const [cr, cc] = cs;
-    const occupants: number[] = [];
-    for (let si = 0; si < level.N; si++) if (ps.cellSuspects[cr][cc].has(si)) occupants.push(si);
+    const blocked = ps.state[cr][cc] === EMPTY && ps.cellSuspects[cr][cc].size === 0;
     console.log(
-      `Crime-scene cell ${fmt(cr, cc)}: treated as IGNORED — the grader never ` +
-      `blocks or reserves it. It stays occupiable by: ${occupants.length ? occupants.map(sname).join(", ") : "(no suspect)"}.`,
+      `Crime-scene cell ${fmt(cr, cc)}: treated as BLOCKED — no candidates, ` +
+      `marked empty (blocked=${blocked}).`,
     );
   } else {
     console.log("Crime-scene cell: none recorded on this level.");
