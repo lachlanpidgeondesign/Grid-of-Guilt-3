@@ -323,40 +323,43 @@ export default function LevelPlayer({ levelId, onBackToLanding, onSolved, onHowT
   return (
     <div className="fixed inset-0 flex flex-col bg-[#fcfcfc]" style={{ zIndex: 10001 }}>
       {/* Single top bar: pale background, no title, no knife.
-          Left: back, pause, timer. Right: undo, hint, ••• (Share lives there). */}
-      <div className="h-[56px] shrink-0 w-full bg-[#e6ebed] flex items-center px-[12px] gap-[8px] relative">
+          Left: back, pause, timer. Right: undo, hint, ••• (Share lives there).
+          Items capped to the 1000px game-area width, centred. */}
+      <div className="h-[56px] shrink-0 w-full bg-[#e6ebed] relative">
         <div aria-hidden="true" className="absolute inset-0 border-b border-[#678893] pointer-events-none" />
-        <button onClick={onBackToLanding} aria-label="Back to levels" className="w-[36px] h-[36px] flex items-center justify-center bg-transparent border-none cursor-pointer p-0 shrink-0">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M15 18L9 12L15 6" stroke="#01394b" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" /></svg>
-        </button>
-        <RoundButton onClick={() => setPaused(true)} disabled={won} label="Pause"><PauseIcon /></RoundButton>
-        <span className="font-['Inter:Semi_Bold',sans-serif] font-semibold text-[16px] text-[#01394b] tabular-nums" style={{ minWidth: 48 }}>{formatTime(elapsed)}</span>
-        <div className="flex-1" />
-        <div className="flex items-center gap-[8px]">
-          <RoundButton onClick={handleUndo} disabled={won || historyLen === 0} label="Undo"><UndoIcon /></RoundButton>
-          <RoundButton onClick={handleHint} disabled={won} label="Hint"><HintIcon /></RoundButton>
-          <RoundButton onClick={() => setMenuOpen((o) => !o)} label="More"><MenuIcon /></RoundButton>
-        </div>
+        <div className="h-full w-full max-w-[1000px] mx-auto flex items-center px-[12px] gap-[8px] relative">
+          <button onClick={onBackToLanding} aria-label="Back to levels" className="w-[36px] h-[36px] flex items-center justify-center bg-transparent border-none cursor-pointer p-0 shrink-0">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M15 18L9 12L15 6" stroke="#01394b" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" /></svg>
+          </button>
+          <RoundButton onClick={() => setPaused(true)} disabled={won} label="Pause"><PauseIcon /></RoundButton>
+          <span className="font-['Inter:Semi_Bold',sans-serif] font-semibold text-[16px] text-[#01394b] tabular-nums" style={{ minWidth: 48 }}>{formatTime(elapsed)}</span>
+          <div className="flex-1" />
+          <div className="flex items-center gap-[8px]">
+            <RoundButton onClick={handleUndo} disabled={won || historyLen === 0} label="Undo"><UndoIcon /></RoundButton>
+            <RoundButton onClick={handleHint} disabled={won} label="Hint"><HintIcon /></RoundButton>
+            <RoundButton onClick={() => setMenuOpen((o) => !o)} label="More"><MenuIcon /></RoundButton>
+          </div>
 
-        {menuOpen && (
-          <>
-            <div className="fixed inset-0" style={{ zIndex: 20 }} onClick={() => setMenuOpen(false)} />
-            <div className="absolute right-[12px] top-[56px] bg-[#fcfcfc] rounded-[12px] shadow-[0px_4px_16px_rgba(0,0,0,0.25)] overflow-hidden" style={{ zIndex: 21, minWidth: 160 }}>
-              <button onClick={() => { setMenuOpen(false); handleShare(); }} className="block w-full text-left px-[16px] py-[12px] font-['Inter',sans-serif] text-[14px] text-[#191919] bg-transparent border-none cursor-pointer hover:bg-[#f0f3f4]">Share</button>
-              <button onClick={() => { setMenuOpen(false); onHowToPlay(); }} className="block w-full text-left px-[16px] py-[12px] font-['Inter',sans-serif] text-[14px] text-[#191919] bg-transparent border-none cursor-pointer hover:bg-[#f0f3f4]">How to play</button>
-              <button onClick={() => { setMenuOpen(false); setConfirmRestart(true); }} className="block w-full text-left px-[16px] py-[12px] font-['Inter',sans-serif] text-[14px] text-[#c0392b] bg-transparent border-none cursor-pointer hover:bg-[#f0f3f4]">Restart level</button>
-            </div>
-          </>
-        )}
-        {shareNote && (
-          <div className="absolute left-1/2 -translate-x-1/2 top-[56px] bg-[#191919] text-[#fcfcfc] text-[12px] font-['Inter',sans-serif] rounded-[6px] px-[10px] py-[5px]" style={{ zIndex: 21 }}>{shareNote}</div>
-        )}
+          {menuOpen && (
+            <>
+              <div className="fixed inset-0" style={{ zIndex: 20 }} onClick={() => setMenuOpen(false)} />
+              <div className="absolute right-[12px] top-[56px] bg-[#fcfcfc] rounded-[12px] shadow-[0px_4px_16px_rgba(0,0,0,0.25)] overflow-hidden" style={{ zIndex: 21, minWidth: 160 }}>
+                <button onClick={() => { setMenuOpen(false); handleShare(); }} className="block w-full text-left px-[16px] py-[12px] font-['Inter',sans-serif] text-[14px] text-[#191919] bg-transparent border-none cursor-pointer hover:bg-[#f0f3f4]">Share</button>
+                <button onClick={() => { setMenuOpen(false); onHowToPlay(); }} className="block w-full text-left px-[16px] py-[12px] font-['Inter',sans-serif] text-[14px] text-[#191919] bg-transparent border-none cursor-pointer hover:bg-[#f0f3f4]">How to play</button>
+                <button onClick={() => { setMenuOpen(false); setConfirmRestart(true); }} className="block w-full text-left px-[16px] py-[12px] font-['Inter',sans-serif] text-[14px] text-[#c0392b] bg-transparent border-none cursor-pointer hover:bg-[#f0f3f4]">Restart level</button>
+              </div>
+            </>
+          )}
+          {shareNote && (
+            <div className="absolute left-1/2 -translate-x-1/2 top-[56px] bg-[#191919] text-[#fcfcfc] text-[12px] font-['Inter',sans-serif] rounded-[6px] px-[10px] py-[5px]" style={{ zIndex: 21 }}>{shareNote}</div>
+          )}
+        </div>
       </div>
 
       {/* Body */}
       {isDesktop ? (
         <div className="flex-1 min-h-0 flex justify-center overflow-hidden relative">
-          <div className="flex gap-[24px] items-start justify-center w-full max-w-[880px] px-[16px] pt-[20px] min-h-0">
+          <div className="flex gap-[24px] items-start justify-center w-full max-w-[1000px] px-[16px] pt-[20px] min-h-0">
             <div className="shrink-0 flex flex-col items-center" id="play-board-col">
               {board}
             </div>

@@ -24,7 +24,6 @@ import {
 } from "./tutorialLevel";
 import { tutorialGuard } from "./tutorialGuard";
 
-const DESKTOP_MIN = 900;
 const N = TUTORIAL_LEVEL.N;
 const ADAM = 0, TOM = 1, RUBY = 2, KATE = 3, EVE = 4;
 const [BODY_R, BODY_C] = TUTORIAL_LEVEL.crimeSceneCell as [number, number];
@@ -86,8 +85,21 @@ function XSwatch() {
   );
 }
 function RoomChipInline({ room }: { room: RoomPalette }) {
+  // Match the board's room-label pill (uppercase bold, fill + dark border).
   return (
-    <span className="inline-flex items-center font-['Inter:Semi_Bold',sans-serif] font-semibold rounded-[6px] px-[6px] py-[1px] text-[#fcfcfc] whitespace-nowrap align-middle" style={{ backgroundColor: room.fill, lineHeight: 1.3 }}>
+    <span
+      className="inline-flex items-center font-['Inter:Bold',sans-serif] font-bold uppercase whitespace-nowrap align-middle"
+      style={{
+        backgroundColor: room.fill,
+        border: `1.5px solid ${room.dark}`,
+        color: "#fcfcfc",
+        borderRadius: 999,
+        padding: "1px 7px",
+        fontSize: 11,
+        letterSpacing: "0.03em",
+        lineHeight: 1.35,
+      }}
+    >
       {room.name}
     </span>
   );
@@ -106,26 +118,19 @@ export default function TutorialScreen({ onFinish }: TutorialScreenProps) {
   const [boardKey, setBoardKey] = useState(0);
   const [veto, setVeto] = useState<string | null>(null);
   const [shake, setShake] = useState(false);
-  const [isDesktop, setIsDesktop] = useState<boolean>(() => { try { return window.innerWidth >= DESKTOP_MIN; } catch { return false; } });
   const [gridSize, setGridSize] = useState(320);
-  const [trayEl, setTrayEl] = useState<HTMLElement | null>(null);
   const vetoTimer = useRef<number | null>(null);
 
   const rooms = TUTORIAL_LEVEL.rooms;
   const hallRoom = rooms.find((r) => r.name === "Hall")!;
 
   // ── Responsive sizing ──────────────────────────────────────────────
+  // Single column on every screen, capped to the 500px content width.
   useLayoutEffect(() => {
     const update = () => {
-      let w = 390, h = 800;
-      try { w = window.innerWidth; h = window.innerHeight; } catch { /* defaults */ }
-      const desktop = w >= DESKTOP_MIN;
-      setIsDesktop(desktop);
-      if (desktop) {
-        setGridSize(Math.max(260, Math.min(h - 220, 420)));
-      } else {
-        setGridSize(Math.max(220, Math.min(w - 72, 360)));
-      }
+      let w = 390;
+      try { w = window.innerWidth; } catch { /* defaults */ }
+      setGridSize(Math.max(220, Math.min(w - 48, 452)));
     };
     update();
     window.addEventListener("resize", update);
@@ -238,9 +243,8 @@ export default function TutorialScreen({ onFinish }: TutorialScreenProps) {
         locked={step === 7}
         won={step === 7}
         allowTray={showTray}
-        trayPortal={isDesktop && showTray ? trayEl : null}
         trayColumns={step === 6 ? 3 : 4}
-        trayShelf={!isDesktop}
+        trayShelf
         traySuspectIdxs={trayIdxs}
         dimmedCells={dimmedCells}
         hatchedCells={hatchedCells}
@@ -351,32 +355,17 @@ export default function TutorialScreen({ onFinish }: TutorialScreenProps) {
   return (
     <div className="fixed inset-0 bg-[#f7f5f2] overflow-y-auto" style={{ zIndex: 10001 }}>
       {skip}
-      {isDesktop ? (
-        <div className="min-h-full flex flex-col items-center px-[24px] pt-[48px] pb-[32px] gap-[20px]">
-          {title}
-          <div className="flex gap-[32px] items-start justify-center w-full max-w-[900px]">
-            <div className="shrink-0 flex flex-col items-center gap-[12px]">
-              {subtitleEl}
-              {board}
-            </div>
-            <div className="w-[360px] shrink-0 flex flex-col gap-[16px] pt-[8px]">
-              {showTray && <div ref={setTrayEl} className="shrink-0" />}
-              {belowBoard}
-              {clueList}
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="min-h-full flex flex-col items-center px-[20px] pt-[48px] pb-[32px] gap-[16px]">
+      <div className="min-h-full flex flex-col items-center px-[20px] pt-[48px] pb-[32px]">
+        <div className="w-full max-w-[500px] flex flex-col items-center gap-[16px]">
           {title}
           {subtitleEl}
           {board}
-          <div className="w-full max-w-[460px] flex flex-col gap-[14px]">
+          <div className="w-full flex flex-col gap-[14px]">
             {belowBoard}
             {clueList}
           </div>
         </div>
-      )}
+      </div>
 
       {veto && (
         <div className="fixed left-1/2 -translate-x-1/2 bottom-[28px] bg-[#191919] text-[#fcfcfc] text-[14px] font-['Inter:Semi_Bold',sans-serif] font-semibold rounded-[8px] px-[16px] py-[10px] text-center" style={{ zIndex: 10010, maxWidth: "88%" }}>

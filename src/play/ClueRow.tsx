@@ -26,10 +26,22 @@ function WindowIcon() {
 }
 
 function RoomChip({ room }: { room: RoomPalette }) {
+  // Mirror the board's room label pill (RoomLabels in PlayBoard): uppercase bold
+  // white text, the room's fill with a darker border, a fully-rounded pill.
   return (
     <span
-      className="inline-flex items-center font-['Inter:Semi_Bold',sans-serif] font-semibold rounded-[6px] px-[6px] py-[1px] text-[#fcfcfc] whitespace-nowrap"
-      style={{ backgroundColor: room.fill, verticalAlign: "middle", lineHeight: 1.3 }}
+      className="inline-flex items-center font-['Inter:Bold',sans-serif] font-bold uppercase whitespace-nowrap"
+      style={{
+        backgroundColor: room.fill,
+        border: `1.5px solid ${room.dark}`,
+        color: "#fcfcfc",
+        borderRadius: 999,
+        padding: "1px 7px",
+        fontSize: 11,
+        letterSpacing: "0.03em",
+        lineHeight: 1.35,
+        verticalAlign: "middle",
+      }}
     >
       {room.name}
     </span>
