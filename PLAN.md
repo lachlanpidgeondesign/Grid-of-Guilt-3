@@ -51,7 +51,7 @@ Expected solve facts (from independent analysis; use them in self-tests):
 
 ---
 
-## [ ] Phase 2 — Shared board component
+## [x] Phase 2 — Shared board component  <!-- Board extracted to src/app/shared/PlayBoard.tsx; Generator uses it with no behaviour change; overlay props inert when omitted; reviewer PASS. -->
 
 Extract the board from `GeneratorGameInner` (`src/app/generator/GeneratorGame.tsx`) into a reusable component, e.g. `src/app/shared/PlayBoard.tsx`. Generator mode must then use it, with **no visible or behavioural change**.
 
@@ -224,3 +224,4 @@ Rebuild for `/play/` only, as a new component (do not edit `HowToPlayModal.tsx`,
 - Phase 0 ❓ `scripts/candidates.zip` committed as a tracked binary alongside the JSON source.
 - Phase 1 ❓ Frozen level data isn't in the app bundle yet (tree-shaken until Phase 3/4 wires `LEVELS` in); bundling + no-fetch proven via esbuild for now.
 - Phase 1 ⚪ `clues.ts` "below" branch keeps a pre-existing no-op `getOtherCell(...)` call; could be dropped.
+- Phase 2 ❓ Undo of a drag-paint still steps one cell at a time, exactly as the generator always did (Phase 4 wants a whole stroke = one undo for `/play/`).

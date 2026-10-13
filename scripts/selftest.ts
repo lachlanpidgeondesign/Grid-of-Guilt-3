@@ -6,6 +6,8 @@
 //
 // Pure logic only: no DOM, no React. New phases append assertions here.
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { loadLevel, LEVELS, type LevelId } from "../src/app/levels/loadLevel";
 import { countSolutions, gradeNoGuess } from "../src/app/generator/constraintSolver";
 import { suspectsForSize } from "../src/app/generator/suspects";
@@ -85,6 +87,23 @@ test("the body cell holds no suspect in any solution", () => {
     for (let si = 0; si < level.N; si++) {
       assert(!(level.sol[si][0] === cs[0] && level.sol[si][1] === cs[1]), `${id}: suspect ${si} sits on the body cell`);
     }
+  }
+});
+
+// PlayBoard (Phase 2) must keep the tutorial overlay props in its public
+// Props type. This is a render-free source check — we can't import the TSX
+// here (figma: asset imports, React), so we read the file and assert the
+// overlay prop names appear inside the exported PlayBoardProps interface.
+test("PlayBoard exposes the tutorial overlay prop types", () => {
+  const src = readFileSync(fileURLToPath(new URL("../src/app/shared/PlayBoard.tsx", import.meta.url)), "utf8");
+  const start = src.indexOf("export interface PlayBoardProps");
+  assert(start !== -1, "PlayBoardProps interface not found in PlayBoard.tsx");
+  const end = src.indexOf("\n}", start);
+  assert(end !== -1, "could not find the end of the PlayBoardProps interface");
+  const body = src.slice(start, end);
+  const requiredProps = ["dimmedCells", "hatchedCells", "xOnlyCells", "canPlace", "allowTray", "locked"];
+  for (const prop of requiredProps) {
+    assert(new RegExp(`\\b${prop}\\??:`).test(body), `PlayBoardProps is missing overlay prop "${prop}"`);
   }
 });
 
