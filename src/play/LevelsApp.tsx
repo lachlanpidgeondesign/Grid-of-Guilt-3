@@ -10,6 +10,7 @@ import LandingScreen from "./LandingScreen";
 import LevelPlayer, { type SolveResult } from "./LevelPlayer";
 import ResultsScreen from "./ResultsScreen";
 import TutorialScreen from "./TutorialScreen";
+import HowToPlayScreen from "./HowToPlayScreen";
 import {
   loadProgress,
   getTutorialSeen,
@@ -57,6 +58,15 @@ function debugOpenTutorial(): boolean {
   }
 }
 
+function debugOpenHowTo(): boolean {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.has("debug") && params.get("open") === "howto";
+  } catch {
+    return false;
+  }
+}
+
 // Finish the tutorial (Skip or Start game): remember it was seen and go straight
 // into the level the player tapped.
 
@@ -64,7 +74,8 @@ export default function LevelsApp() {
   const [screen, setScreen] = useState<Screen>(() => (debugOpenTutorial() ? "tutorial" : debugOpenLevel() ? "level" : "landing"));
   const [activeLevel, setActiveLevel] = useState<LevelId | null>(() => (debugOpenTutorial() ? "easy" : debugOpenLevel()));
   const [lastResult, setLastResult] = useState<SolveResult | null>(null);
-  const [howToPlay, setHowToPlay] = useState(false);
+  const [howToPlay, setHowToPlay] = useState(() => debugOpenHowTo());
+  const [replayTutorial, setReplayTutorial] = useState(false);
   const [progress, setProgress] = useState<ProgressMap>(() => loadProgress());
   const debug = hasDebugFlag();
 
@@ -130,22 +141,33 @@ export default function LevelsApp() {
     setScreen("level");
   }, []);
 
+  // Replay tutorial (from the How to Play screen): close How to Play and run the
+  // tutorial as an overlay. The underlying screen (landing or the in-progress
+  // level) stays mounted, so finishing returns to exactly where it was opened;
+  // the level's timer is frozen via `suspended` while an overlay covers it.
+  const handleReplayTutorial = useCallback(() => {
+    setHowToPlay(false);
+    setReplayTutorial(true);
+  }, []);
+
+  // The base screen (landing / tutorial / level / results). How to Play and
+  // Replay tutorial render as overlays on top of it.
+  let base: React.ReactNode;
   if (screen === "tutorial" && activeLevel) {
-    return <TutorialScreen onFinish={handleSkipTutorial} />;
-  }
-  if (screen === "level" && activeLevel) {
-    return (
+    base = <TutorialScreen onFinish={handleSkipTutorial} />;
+  } else if (screen === "level" && activeLevel) {
+    base = (
       <LevelPlayer
         key={activeLevel}
         levelId={activeLevel}
         onBackToLanding={handleBackToLanding}
         onSolved={handleSolved}
         onHowToPlay={() => setHowToPlay(true)}
+        suspended={howToPlay || replayTutorial}
       />
     );
-  }
-  if (screen === "results" && lastResult) {
-    return (
+  } else if (screen === "results" && lastResult) {
+    base = (
       <ResultsScreen
         levelId={lastResult.levelId}
         seconds={lastResult.seconds}
@@ -155,10 +177,8 @@ export default function LevelsApp() {
         onShare={handleResultsShare}
       />
     );
-  }
-
-  return (
-    <>
+  } else {
+    base = (
       <LandingScreen
         progress={progress}
         debug={debug}
@@ -167,23 +187,19 @@ export default function LevelsApp() {
         onHowToPlay={() => setHowToPlay(true)}
         onReset={handleReset}
       />
+    );
+  }
+
+  return (
+    <>
+      {base}
       {howToPlay && (
-        <div className="fixed inset-0 flex items-center justify-center px-[24px]" style={{ zIndex: 10003, backgroundColor: "rgba(1,24,31,0.8)" }}>
-          <div className="bg-[#fcfcfc] w-full max-w-[420px] rounded-[20px] px-[24px] py-[28px] flex flex-col gap-[16px]">
-            <p className="font-['Literata',serif] font-extrabold text-[22px] text-[#191919]">How to play</p>
-            <p className="font-['Inter',sans-serif] font-normal text-[14px] text-[#191919]" style={{ lineHeight: "20px" }}>
-              Place one suspect per row, column and room, with no two suspects touching — not even diagonally.
-              Every suspect's clue must be true. The murderer is whoever ends up in the same room as the body.
-            </p>
-            <button
-              onClick={() => setHowToPlay(false)}
-              className="self-end rounded-[50px] bg-[#01394b] text-[#fcfcfc] font-['Inter',sans-serif] font-semibold text-[15px] px-[24px] py-[10px] border-none cursor-pointer"
-            >
-              Got it
-            </button>
-          </div>
-        </div>
+        <HowToPlayScreen
+          onClose={() => setHowToPlay(false)}
+          onReplayTutorial={handleReplayTutorial}
+        />
       )}
+      {replayTutorial && <TutorialScreen onFinish={() => setReplayTutorial(false)} />}
     </>
   );
 }

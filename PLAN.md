@@ -183,7 +183,7 @@ B Bedroom · K Kitchen · H Hall · L Bathroom · S Study
 
 ---
 
-## [ ] Phase 6 — How to Play screen
+## [x] Phase 6 — How to Play screen  <!-- Built src/play/HowToPlayScreen (modal ≥640px / bottom sheet below, ✕ + Escape + backdrop close, focus in/out), mapped to the pasted reference image: intro, four illustrated rule rows, Tip cell diagrams, Replay tutorial; LevelsApp renders How to Play + Replay tutorial as overlays over any screen; additive LevelPlayer suspended prop freezes the timer; ?debug&open=howto; reviewer PASS. -->
 
 Rebuild for `/play/` only, as a new component (do not edit `HowToPlayModal.tsx`, which the daily game still uses). Reference: `docs/tutorial-ref/1790849911769_image.png`; where this plan differs, the plan wins.
 
@@ -238,3 +238,8 @@ Rebuild for `/play/` only, as a new component (do not edit `HowToPlayModal.tsx`,
 - Phase 5 ❓ Tutorial cast sprites/colours are borrowed from the shared avatar sheet (Adam/Tom/Ruby/Kate/Eve are distinct faces, not bespoke art).
 - Phase 5 ❓ Added additive PlayBoard props `suspects?` (tutorial cast) and `traySuspectIdxs?` (show one suspect at a time); generator and level player pass neither, so their behaviour is unchanged.
 - Phase 5 ❓ Added a QA deep-link `?debug&open=tutorial` that opens the tutorial directly (gated behind `?debug`).
+- Phase 6 ❓ How to Play is mapped to the pasted reference image: rule order is row/column → no-touch → one-per-room (image order, not PLAN's), and the five Controls bullets are condensed into the image's single Tip (empty→X→dot + "drag to mark several X's"); "drag a suspect to place" and "tap a third time to clear" are not shown. Confirm the image wins here.
+- Phase 6 ❓ Mobile sheet is `maxHeight: 92vh` (scrolls) rather than literally full-height; matches the bottom-sheet request.
+- Phase 6 ❓ Replay tutorial does not set `gog-play-tutorial-seen` (it returns in place); the level stays mounted and its timer is frozen via the additive `suspended` prop while any overlay covers it.
+- Phase 6 ❓ Added a QA deep-link `?debug&open=howto` that opens the How to Play screen directly (gated behind `?debug`).
+- Phase 6 ⚪ The reference `docs/tutorial-ref/1790849911769_image.png` named in PLAN doesn't exist; the pasted chat image was used instead.

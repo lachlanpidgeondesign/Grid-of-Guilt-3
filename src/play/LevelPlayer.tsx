@@ -43,6 +43,9 @@ interface LevelPlayerProps {
   onBackToLanding: () => void;
   onSolved: (result: SolveResult) => void;
   onHowToPlay: () => void;
+  /** Freeze the timer without showing the pause panel (e.g. while an overlay
+   *  like Replay tutorial is covering the level). */
+  suspended?: boolean;
 }
 
 // ── Small inline icons ────────────────────────────────────────────────
@@ -77,7 +80,7 @@ function RoundButton({ onClick, disabled, label, children }: { onClick: () => vo
   );
 }
 
-export default function LevelPlayer({ levelId, onBackToLanding, onSolved, onHowToPlay }: LevelPlayerProps) {
+export default function LevelPlayer({ levelId, onBackToLanding, onSolved, onHowToPlay, suspended = false }: LevelPlayerProps) {
   const level = LEVELS[levelId];
   const N = level.N;
   const specs = loadLevelClueSpecs(levelId);
@@ -157,15 +160,15 @@ export default function LevelPlayer({ levelId, onBackToLanding, onSolved, onHowT
     window.setTimeout(() => onSolved(result), delay);
   }, [levelId, onSolved]);
 
-  // Timer: ticks each second while playing (not paused, not won).
+  // Timer: ticks each second while playing (not paused, not won, not suspended).
   useEffect(() => {
-    if (paused || won) return;
+    if (paused || won || suspended) return;
     const t = window.setInterval(() => {
       setElapsed((e) => { const n = e + 1; elapsedRef.current = n; return n; });
       persist();
     }, 1000);
     return () => window.clearInterval(t);
-  }, [paused, won, persist]);
+  }, [paused, won, suspended, persist]);
 
   // Auto-pause when the tab is hidden or the page is left.
   useEffect(() => {
