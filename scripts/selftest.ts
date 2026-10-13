@@ -148,11 +148,11 @@ test("storage helpers return defaults when storage throws", () => {
     assert(Object.keys(storage.loadProgress()).length === 0, "loadProgress should default to {} when storage throws");
     assert(storage.getTutorialSeen() === false, "getTutorialSeen should default to false when storage throws");
     assert(storage.hasLevelState("easy") === false, "hasLevelState should default to false when storage throws");
-    assert(storage.loadLevelState("easy") === null, "loadLevelState should default to null when storage throws");
+    assert(storage.loadLevelState("easy", 5) === null, "loadLevelState should default to null when storage throws");
     // Writes must not throw.
     storage.saveProgress({ easy: { solved: true, bestSeconds: 10, hints: 0 } });
     storage.setTutorialSeen(true);
-    storage.saveLevelState("easy", { a: 1 });
+    storage.saveLevelState("easy", { grid: [], history: [], elapsedSeconds: 0, hints: 0 });
     storage.resetAllProgress();
   } finally {
     installStore(undefined);
@@ -231,6 +231,66 @@ test("formatTime renders m:ss", () => {
   assert(storage.formatTime(9) === "0:09", "9s → 0:09");
   assert(storage.formatTime(65) === "1:05", "65s → 1:05");
   assert(storage.formatTime(600) === "10:00", "600s → 10:00");
+});
+
+// ── Phase 4: clue display order, results room, saved-state shape ─────────────
+const clueOrder = await import("../src/play/clueOrder");
+
+test("clue display order never ends with the murderer", () => {
+  for (const id of LEVEL_IDS) {
+    const level = LEVELS[id];
+    const active = clueOrder.activeSuspectIdxs(level);
+    // Check both the fresh board and every "one clue satisfied" state, plus the
+    // all-but-one satisfied states — the murderer must never be last.
+    const states: Array<Set<number>> = [new Set()];
+    for (const si of active) states.push(new Set([si]));
+    for (const si of active) states.push(new Set(active.filter((x) => x !== si)));
+    states.push(new Set(active)); // all satisfied
+    for (const satisfied of states) {
+      const order = clueOrder.clueDisplayOrder(active, level.murdererIdx, satisfied);
+      assert(order.length === active.length, `${id}: display order must list every active suspect once`);
+      assert(order[order.length - 1] !== level.murdererIdx, `${id}: clue list must not end with the murderer`);
+      assert(new Set(order).size === order.length, `${id}: display order must not duplicate a suspect`);
+    }
+  }
+});
+
+test("results line names the murderer's actual room", () => {
+  for (const id of LEVEL_IDS) {
+    const level = LEVELS[id];
+    const [mr, mc] = level.sol[level.murdererIdx];
+    const expected = level.rooms[level.map[mr][mc]].name;
+    assert(clueOrder.murdererRoomName(level) === expected, `${id}: murdererRoomName must match the body's room`);
+    // The murderer shares the body's room.
+    const cs = level.crimeSceneCell;
+    if (cs) {
+      assert(level.map[mr][mc] === level.map[cs[0]][cs[1]], `${id}: murderer must be in the body's room`);
+    }
+  }
+});
+
+test("level state round-trips and corrupt state is rejected", () => {
+  installStore(makeStore());
+  try {
+    const state = {
+      grid: Array.from({ length: 5 }, () => Array<number | null>(5).fill(null)),
+      history: [{ type: "place-x" as const, row: 0, col: 0, previousContent: null }],
+      elapsedSeconds: 73,
+      hints: 1,
+    };
+    storage.saveLevelState("easy", state);
+    const back = storage.loadLevelState("easy", 5);
+    assert(back !== null, "saved level state should load back");
+    assert(back!.elapsedSeconds === 73 && back!.hints === 1, "elapsed/hints must round-trip");
+    assert(back!.history.length === 1, "history must round-trip");
+    // Wrong board size → rejected (fall back to a fresh board).
+    assert(storage.loadLevelState("easy", 7) === null, "a state whose grid size mismatches must be rejected");
+    // Corrupt JSON → rejected, no throw.
+    (globalThis as { localStorage?: Storage }).localStorage!.setItem("gog-play-state-easy", "{broken");
+    assert(storage.loadLevelState("easy", 5) === null, "corrupt saved state must be rejected");
+  } finally {
+    installStore(undefined);
+  }
 });
 
 // ── Runner ─────────────────────────────────────────────────────────────────

@@ -133,20 +133,51 @@ export function setTutorialSeen(seen: boolean): void {
 
 // ── In-progress board state (shape finalised in Phase 4) ────────────────────
 // Stored/loaded as opaque JSON so this file stays free of PlayBoard's
-// figma:asset imports (which can't run under the self-test).
+// figma:asset imports (which can't run under the self-test). The structural
+// types below mirror PlayBoard's CellContent / BoardAction without importing
+// them, so everything here is JSON-serialisable and framework-free.
+export type PersistedCell = number | "X" | "dot" | "skull" | null;
+export interface PersistedAction {
+  type: "place-suspect" | "place-x" | "remove-x" | "remove-suspect" | "place-dot" | "remove-dot";
+  row: number;
+  col: number;
+  previousContent: PersistedCell;
+}
+export interface PersistedLevelState {
+  grid: PersistedCell[][];
+  history: PersistedAction[];
+  elapsedSeconds: number;
+  hints: number;
+}
+
+// Validate a loaded level state enough to trust it; anything malformed makes
+// the caller fall back to a fresh board (never crash).
+export function isValidLevelState(v: unknown, n: number): v is PersistedLevelState {
+  if (typeof v !== "object" || v === null) return false;
+  const o = v as Record<string, unknown>;
+  if (typeof o.elapsedSeconds !== "number" || typeof o.hints !== "number") return false;
+  if (!Array.isArray(o.grid) || o.grid.length !== n) return false;
+  for (const row of o.grid) {
+    if (!Array.isArray(row) || row.length !== n) return false;
+  }
+  if (!Array.isArray(o.history)) return false;
+  return true;
+}
+
 export function hasLevelState(id: LevelId): boolean {
   return readRaw(levelStateKey(id)) !== null;
 }
-export function loadLevelState<T = unknown>(id: LevelId): T | null {
+export function loadLevelState(id: LevelId, n: number): PersistedLevelState | null {
   const raw = readRaw(levelStateKey(id));
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as T;
+    const parsed: unknown = JSON.parse(raw);
+    return isValidLevelState(parsed, n) ? parsed : null;
   } catch {
     return null;
   }
 }
-export function saveLevelState(id: LevelId, state: unknown): void {
+export function saveLevelState(id: LevelId, state: PersistedLevelState): void {
   writeRaw(levelStateKey(id), JSON.stringify(state));
 }
 export function clearLevelState(id: LevelId): void {

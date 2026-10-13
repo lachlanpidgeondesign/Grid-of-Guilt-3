@@ -112,6 +112,13 @@ export function loadLevel(id: LevelId): GeneratedLevel {
   return buildLevel(FROZEN[id]);
 }
 
+/** Raw clue specs per suspect (null for the pre-placed starter). The /play/
+ *  clue list renders from these (room chips, door/window icons), not the
+ *  generator's HTML text string. */
+export function loadLevelClueSpecs(id: LevelId): Array<ClueSpec | null> {
+  return FROZEN[id].clues;
+}
+
 /** All three frozen levels, built once from the bundled JSON. */
 export const LEVELS: Record<LevelId, GeneratedLevel> = {
   easy: buildLevel(FROZEN.easy),

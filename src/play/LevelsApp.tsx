@@ -7,14 +7,19 @@
 import { useState, useCallback } from "react";
 import type { LevelId } from "../app/levels/loadLevel";
 import LandingScreen from "./LandingScreen";
+import LevelPlayer, { type SolveResult } from "./LevelPlayer";
+import ResultsScreen from "./ResultsScreen";
 import {
   loadProgress,
   getTutorialSeen,
   clearLevelState,
   resetAllProgress,
+  formatTime,
   LEVEL_LABEL,
+  LEVEL_ORDER,
   type ProgressMap,
 } from "./storage";
+import { playUrl, shareOrCopy } from "./share";
 
 type Screen = "landing" | "tutorial" | "level" | "results";
 
@@ -26,8 +31,22 @@ function hasDebugFlag(): boolean {
   }
 }
 
-// Temporary placeholder shared by the not-yet-built screens (Phases 4–6). Keeps
-// the state machine honest without pre-empting later design work.
+// Debug deep-link (QA/screenshots): with `?debug` present, `?open=easy|medium|
+// hard` opens that level's board directly, bypassing the tutorial gate. Ignored
+// in a normal production URL and for any other value.
+function debugOpenLevel(): LevelId | null {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has("debug")) return null;
+    const v = params.get("open");
+    return v === "easy" || v === "medium" || v === "hard" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+// Temporary placeholder for the not-yet-built tutorial (Phase 5). Keeps the
+// state machine honest without pre-empting later design work.
 function Placeholder({ title, onBack }: { title: string; onBack: () => void }) {
   return (
     <div className="bg-[#01394b] fixed inset-0 flex flex-col items-center justify-center gap-[20px] px-[24px]" style={{ zIndex: 10001 }}>
@@ -44,8 +63,9 @@ function Placeholder({ title, onBack }: { title: string; onBack: () => void }) {
 }
 
 export default function LevelsApp() {
-  const [screen, setScreen] = useState<Screen>("landing");
-  const [activeLevel, setActiveLevel] = useState<LevelId | null>(null);
+  const [screen, setScreen] = useState<Screen>(() => (debugOpenLevel() ? "level" : "landing"));
+  const [activeLevel, setActiveLevel] = useState<LevelId | null>(() => debugOpenLevel());
+  const [lastResult, setLastResult] = useState<SolveResult | null>(null);
   const [howToPlay, setHowToPlay] = useState(false);
   const [progress, setProgress] = useState<ProgressMap>(() => loadProgress());
   const debug = hasDebugFlag();
@@ -74,6 +94,30 @@ export default function LevelsApp() {
     setScreen("landing");
   }, [refreshProgress]);
 
+  const handleSolved = useCallback((result: SolveResult) => {
+    // LevelPlayer already recorded the solve and cleared the saved board before
+    // handing over; here we just refresh the landing data and show the results.
+    refreshProgress();
+    setLastResult(result);
+    setScreen("results");
+  }, [refreshProgress]);
+
+  const handleNextLevel = useCallback(() => {
+    if (!lastResult) return;
+    const nextIdx = LEVEL_ORDER.indexOf(lastResult.levelId) + 1;
+    if (nextIdx >= LEVEL_ORDER.length) { handleBackToLanding(); return; }
+    // Resume the next level if it has an in-progress save; otherwise it starts
+    // fresh. (Don't wipe a save the player may already have there.)
+    setActiveLevel(LEVEL_ORDER[nextIdx]);
+    setScreen("level");
+  }, [lastResult, handleBackToLanding]);
+
+  const handleResultsShare = useCallback(async () => {
+    if (!lastResult) return;
+    const text = `I caught the murderer on Grid of Guilt ${LEVEL_LABEL[lastResult.levelId]} in ${formatTime(lastResult.seconds)}`;
+    await shareOrCopy(text, playUrl());
+  }, [lastResult]);
+
   const handleReset = useCallback(() => {
     resetAllProgress();
     try {
@@ -83,14 +127,31 @@ export default function LevelsApp() {
     }
   }, [refreshProgress]);
 
-  if (screen === "tutorial") {
+  if (screen === "tutorial" && activeLevel) {
     return <Placeholder title="Tutorial" onBack={handleBackToLanding} />;
   }
   if (screen === "level" && activeLevel) {
-    return <Placeholder title={`${LEVEL_LABEL[activeLevel]} level`} onBack={handleBackToLanding} />;
+    return (
+      <LevelPlayer
+        key={activeLevel}
+        levelId={activeLevel}
+        onBackToLanding={handleBackToLanding}
+        onSolved={handleSolved}
+        onHowToPlay={() => setHowToPlay(true)}
+      />
+    );
   }
-  if (screen === "results" && activeLevel) {
-    return <Placeholder title="Results" onBack={handleBackToLanding} />;
+  if (screen === "results" && lastResult) {
+    return (
+      <ResultsScreen
+        levelId={lastResult.levelId}
+        seconds={lastResult.seconds}
+        hints={lastResult.hints}
+        onNextLevel={handleNextLevel}
+        onBackToLevels={handleBackToLanding}
+        onShare={handleResultsShare}
+      />
+    );
   }
 
   return (

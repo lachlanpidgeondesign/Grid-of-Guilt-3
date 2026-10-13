@@ -22,6 +22,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import imgSkull from "figma:asset/a3421f4c3e01f93f3d4ecd691c2877bc43bb85f8.png";
 import imgRedStripes from "figma:asset/6ef35fa416ded2d3144709b550f95331c3928998.png";
 import SuspectTile from "./SuspectTile";
@@ -384,6 +385,9 @@ export interface PlayBoardProps {
   won?: boolean;
   /** Show and enable the suspect tray (default true). */
   allowTray?: boolean;
+  /** Render the tray into this element (desktop right column) instead of inline.
+   *  Omit for the default inline-below-board layout. */
+  trayPortal?: HTMLElement | null;
   /** Slot rendered between the board and the tray (e.g. the generator buttons). */
   betweenBoardAndTray?: ReactNode;
   // ── Hint overlays (generator + play) ──
@@ -413,6 +417,7 @@ function PlayBoardInner(props: PlayBoardProps, ref: React.Ref<PlayBoardHandle>) 
     level, gridSize, showNameOnBoard,
     initialGrid, initialHistory,
     locked = false, won = false, allowTray = true,
+    trayPortal,
     betweenBoardAndTray,
     hintCells, hintPendingCells,
     dimmedCells, hatchedCells, xOnlyCells,
@@ -832,6 +837,49 @@ function PlayBoardInner(props: PlayBoardProps, ref: React.Ref<PlayBoardHandle>) 
   const hintCellSet = hintCells ?? null;
   const hintPendingSet = hintPendingCells ?? null;
 
+  const trayNode = allowTray ? (
+    <div ref={trayRef} className="w-full shrink-0 relative" style={{ paddingTop: `${32 * cellScale}px`, touchAction: "none" }}>
+      <div className="flex justify-center items-end z-10 relative flex-wrap" style={{ marginTop: `${-24 * cellScale}px`, rowGap: `${8 * cellScale}px` }}>
+        {suspects.map((s, idx) => {
+          if (idx === level.starterIdx) return null; // starter pinned on board
+          const isPlaced = placedSuspects.has(idx);
+          const isDragging = dragState?.idx === idx;
+          return (
+            <div
+              key={s.name}
+              style={{
+                width: isPlaced || isDragging ? 0 : trayTileSize,
+                height: trayTileSize,
+                opacity: isPlaced || isDragging ? 0 : 1,
+                marginLeft: isPlaced || isDragging ? 0 : trayGap / 2,
+                marginRight: isPlaced || isDragging ? 0 : trayGap / 2,
+                transform: isPlaced || isDragging ? "scale(0.5)" : "scale(1)",
+                transition: isDragging ? "none" : "width 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease, margin 0.35s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s ease",
+                overflow: isPlaced || isDragging ? "hidden" : "visible",
+                flexShrink: 0,
+                touchAction: "none",
+              }}
+              onPointerDown={(e) => { if (!isPlaced) handlePointerDown(e, idx, null); }}
+            >
+              <div style={{ width: trayTileSize, height: trayTileSize }}>
+                <SuspectTile
+                  name={s.name}
+                  color={s.color}
+                  spritePos={s.sprite}
+                  showEveBadge={false}
+                  selected={selectedSuspect === idx}
+                  gridScale={cellScale}
+                  inGrid
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="bg-[#e6ebed] w-full" style={{ height: `${48 * cellScale}px`, marginTop: `${-40 * cellScale}px` }} />
+    </div>
+  ) : null;
+
   return (
     <>
       {/* Grid with labels */}
@@ -974,49 +1022,9 @@ function PlayBoardInner(props: PlayBoardProps, ref: React.Ref<PlayBoardHandle>) 
 
       {betweenBoardAndTray}
 
-      {/* Suspect tray */}
-      {allowTray && (
-        <div ref={trayRef} className="w-full shrink-0 relative" style={{ paddingTop: `${32 * cellScale}px`, touchAction: "none" }}>
-          <div className="flex justify-center items-end z-10 relative flex-wrap" style={{ marginTop: `${-24 * cellScale}px`, rowGap: `${8 * cellScale}px` }}>
-            {suspects.map((s, idx) => {
-              if (idx === level.starterIdx) return null; // starter pinned on board
-              const isPlaced = placedSuspects.has(idx);
-              const isDragging = dragState?.idx === idx;
-              return (
-                <div
-                  key={s.name}
-                  style={{
-                    width: isPlaced || isDragging ? 0 : trayTileSize,
-                    height: trayTileSize,
-                    opacity: isPlaced || isDragging ? 0 : 1,
-                    marginLeft: isPlaced || isDragging ? 0 : trayGap / 2,
-                    marginRight: isPlaced || isDragging ? 0 : trayGap / 2,
-                    transform: isPlaced || isDragging ? "scale(0.5)" : "scale(1)",
-                    transition: isDragging ? "none" : "width 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease, margin 0.35s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s ease",
-                    overflow: isPlaced || isDragging ? "hidden" : "visible",
-                    flexShrink: 0,
-                    touchAction: "none",
-                  }}
-                  onPointerDown={(e) => { if (!isPlaced) handlePointerDown(e, idx, null); }}
-                >
-                  <div style={{ width: trayTileSize, height: trayTileSize }}>
-                    <SuspectTile
-                      name={s.name}
-                      color={s.color}
-                      spritePos={s.sprite}
-                      showEveBadge={false}
-                      selected={selectedSuspect === idx}
-                      gridScale={cellScale}
-                      inGrid
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <div className="bg-[#e6ebed] w-full" style={{ height: `${48 * cellScale}px`, marginTop: `${-40 * cellScale}px` }} />
-        </div>
-      )}
+      {/* Suspect tray (inline by default, or portalled into the desktop
+          right-hand column when trayPortal is supplied). */}
+      {trayNode && (trayPortal ? createPortal(trayNode, trayPortal) : trayNode)}
 
       {/* Floating drag element */}
       {dragState && (

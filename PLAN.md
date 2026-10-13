@@ -94,7 +94,7 @@ The board takes a `GeneratedLevel` plus board state, and supports what both the 
 
 ---
 
-## [ ] Phase 4 — Level player and results · CHECKPOINT
+## [x] Phase 4 — Level player and results · CHECKPOINT  <!-- Built src/play/LevelPlayer, ResultsScreen, ClueRow (ClueSpec chips/icons), playHint, clueOrder, share; saved-state resume + win→results; desktop two-column via additive PlayBoard trayPortal; reviewer PASS (round 2). -->
 
 Layout reference: `docs/design-ref/level-layout.png`. Match it on mobile; where this plan differs, the plan wins.
 
@@ -228,3 +228,8 @@ Rebuild for `/play/` only, as a new component (do not edit `HowToPlayModal.tsx`,
 - Phase 3 ❓ Solved sheet shows a "{Level} solved" header above the spec's "You solved this in {time}." line.
 - Phase 3 ❓ How-to-play overlay copy is written fresh (not lifted from the daily game's How to Play screen); closes via "Got it" only.
 - Phase 3 ❓ `play/index.html` is marked `noindex, nofollow` (matches the daily page).
+- Phase 4 ❓ Header bar uses the app's teal `#01394b`, not the plan's "purple" — the reference image `docs/design-ref/level-layout.png` doesn't exist and teal keeps /play/ cohesive. Confirm or send a purple.
+- Phase 4 ❓ Game bar is `#01262f` (darker teal); round buttons match the generator's style.
+- Phase 4 ❓ Win→results delay is 1500ms (0 under reduced motion).
+- Phase 4 ❓ Added a QA deep-link `?debug&open=easy|medium|hard` that opens a level board directly (gated behind `?debug`, used for screenshots/testing).
+- Phase 4 ❓ Hint is unlimited + counted; pressing Hint reveals the next step (toggle hides it); the count only increments on reveal.
