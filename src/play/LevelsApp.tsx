@@ -12,6 +12,7 @@ import ResultsScreen from "./ResultsScreen";
 import {
   loadProgress,
   getTutorialSeen,
+  setTutorialSeen,
   clearLevelState,
   resetAllProgress,
   formatTime,
@@ -45,19 +46,29 @@ function debugOpenLevel(): LevelId | null {
   }
 }
 
-// Temporary placeholder for the not-yet-built tutorial (Phase 5). Keeps the
-// state machine honest without pre-empting later design work.
-function Placeholder({ title, onBack }: { title: string; onBack: () => void }) {
+// Temporary placeholder for the not-yet-built tutorial (Phase 5). Its Skip
+// action mirrors the real tutorial: set the seen flag and go straight into the
+// level the player tapped. Keeps the state machine honest and the board
+// reachable before Phase 5 lands.
+function TutorialPlaceholder({ onSkip, onBack }: { onSkip: () => void; onBack: () => void }) {
   return (
     <div className="bg-[#01394b] fixed inset-0 flex flex-col items-center justify-center gap-[20px] px-[24px]" style={{ zIndex: 10001 }}>
-      <p className="font-['Literata',serif] font-extrabold text-[24px] text-[#fcfcfc] text-center">{title}</p>
-      <p className="font-['Inter',sans-serif] font-normal text-[14px] text-[#9fb6bd] text-center">Coming in a later phase.</p>
-      <button
-        onClick={onBack}
-        className="rounded-[50px] bg-[#fcfcfc] text-[#191919] font-['Inter',sans-serif] font-semibold text-[15px] px-[24px] py-[12px] border-none cursor-pointer"
-      >
-        Back
-      </button>
+      <p className="font-['Literata',serif] font-extrabold text-[24px] text-[#fcfcfc] text-center">Tutorial</p>
+      <p className="font-['Inter',sans-serif] font-normal text-[14px] text-[#9fb6bd] text-center">The full tutorial arrives in a later phase.</p>
+      <div className="flex flex-col items-stretch gap-[10px] w-full max-w-[260px]">
+        <button
+          onClick={onSkip}
+          className="rounded-[50px] bg-[#fcfcfc] text-[#191919] font-['Inter',sans-serif] font-semibold text-[15px] px-[24px] py-[12px] border-none cursor-pointer"
+        >
+          Skip to game
+        </button>
+        <button
+          onClick={onBack}
+          className="rounded-[50px] bg-transparent text-[#fcfcfc] font-['Inter',sans-serif] font-semibold text-[15px] px-[24px] py-[12px] border border-[#678893] cursor-pointer"
+        >
+          Back to levels
+        </button>
+      </div>
     </div>
   );
 }
@@ -127,8 +138,13 @@ export default function LevelsApp() {
     }
   }, [refreshProgress]);
 
+  const handleSkipTutorial = useCallback(() => {
+    setTutorialSeen(true);
+    setScreen("level");
+  }, []);
+
   if (screen === "tutorial" && activeLevel) {
-    return <Placeholder title="Tutorial" onBack={handleBackToLanding} />;
+    return <TutorialPlaceholder onSkip={handleSkipTutorial} onBack={handleBackToLanding} />;
   }
   if (screen === "level" && activeLevel) {
     return (

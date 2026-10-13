@@ -388,6 +388,13 @@ export interface PlayBoardProps {
   /** Render the tray into this element (desktop right column) instead of inline.
    *  Omit for the default inline-below-board layout. */
   trayPortal?: HTMLElement | null;
+  /** Lay the tray out as a fixed grid with this many columns, keeping an empty
+   *  slot for each placed suspect (the tray never shrinks). Omit for the default
+   *  centred flow tray that collapses placed tiles. */
+  trayColumns?: number;
+  /** Draw the pale shelf bar under the flow tray (default true). Ignored when
+   *  trayColumns is set. */
+  trayShelf?: boolean;
   /** Slot rendered between the board and the tray (e.g. the generator buttons). */
   betweenBoardAndTray?: ReactNode;
   // ── Hint overlays (generator + play) ──
@@ -417,7 +424,7 @@ function PlayBoardInner(props: PlayBoardProps, ref: React.Ref<PlayBoardHandle>) 
     level, gridSize, showNameOnBoard,
     initialGrid, initialHistory,
     locked = false, won = false, allowTray = true,
-    trayPortal,
+    trayPortal, trayColumns, trayShelf = true,
     betweenBoardAndTray,
     hintCells, hintPendingCells,
     dimmedCells, hatchedCells, xOnlyCells,
@@ -837,7 +844,65 @@ function PlayBoardInner(props: PlayBoardProps, ref: React.Ref<PlayBoardHandle>) 
   const hintCellSet = hintCells ?? null;
   const hintPendingSet = hintPendingCells ?? null;
 
-  const trayNode = allowTray ? (
+  const trayTile = (s: (typeof suspects)[number], idx: number) => (
+    <div style={{ width: trayTileSize, height: trayTileSize }}>
+      <SuspectTile
+        name={s.name}
+        color={s.color}
+        spritePos={s.sprite}
+        showEveBadge={false}
+        selected={selectedSuspect === idx}
+        gridScale={cellScale}
+        inGrid
+      />
+    </div>
+  );
+
+  // Fixed-grid tray (used by /play/): every suspect keeps a slot, so the area
+  // never shrinks as suspects are placed. Placed/dragging tiles fade out in place.
+  const gridTrayNode = allowTray && trayColumns != null ? (
+    <div ref={trayRef} className="w-full shrink-0 relative" style={{ paddingTop: `${16 * cellScale}px`, touchAction: "none" }}>
+      {trayShelf && (
+        <div className="bg-[#e6ebed] absolute left-0 right-0 z-0" style={{ bottom: `${-8 * cellScale}px`, height: `${48 * cellScale}px` }} />
+      )}
+      <div className="relative z-10 flex justify-center">
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: `repeat(${trayColumns}, ${trayTileSize}px)`,
+            gap: `${trayGap}px`,
+            justifyContent: "center",
+          }}
+        >
+          {suspects.map((s, idx) => {
+            if (idx === level.starterIdx) return null; // starter pinned on board
+            const isPlaced = placedSuspects.has(idx);
+            const isDragging = dragState?.idx === idx;
+            const hidden = isPlaced || isDragging;
+            return (
+              <div
+                key={s.name}
+                style={{
+                  width: trayTileSize,
+                  height: trayTileSize,
+                  opacity: hidden ? 0 : 1,
+                  transform: hidden ? "scale(0.5)" : "scale(1)",
+                  transition: isDragging ? "none" : "opacity 0.25s ease, transform 0.3s ease",
+                  pointerEvents: hidden ? "none" : "auto",
+                  touchAction: "none",
+                }}
+                onPointerDown={(e) => { if (!isPlaced) handlePointerDown(e, idx, null); }}
+              >
+                {trayTile(s, idx)}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  const flowTrayNode = allowTray && trayColumns == null ? (
     <div ref={trayRef} className="w-full shrink-0 relative" style={{ paddingTop: `${32 * cellScale}px`, touchAction: "none" }}>
       <div className="flex justify-center items-end z-10 relative flex-wrap" style={{ marginTop: `${-24 * cellScale}px`, rowGap: `${8 * cellScale}px` }}>
         {suspects.map((s, idx) => {
@@ -861,24 +926,18 @@ function PlayBoardInner(props: PlayBoardProps, ref: React.Ref<PlayBoardHandle>) 
               }}
               onPointerDown={(e) => { if (!isPlaced) handlePointerDown(e, idx, null); }}
             >
-              <div style={{ width: trayTileSize, height: trayTileSize }}>
-                <SuspectTile
-                  name={s.name}
-                  color={s.color}
-                  spritePos={s.sprite}
-                  showEveBadge={false}
-                  selected={selectedSuspect === idx}
-                  gridScale={cellScale}
-                  inGrid
-                />
-              </div>
+              {trayTile(s, idx)}
             </div>
           );
         })}
       </div>
-      <div className="bg-[#e6ebed] w-full" style={{ height: `${48 * cellScale}px`, marginTop: `${-40 * cellScale}px` }} />
+      {trayShelf && (
+        <div className="bg-[#e6ebed] w-full" style={{ height: `${48 * cellScale}px`, marginTop: `${-40 * cellScale}px` }} />
+      )}
     </div>
   ) : null;
+
+  const trayNode = gridTrayNode ?? flowTrayNode;
 
   return (
     <>
