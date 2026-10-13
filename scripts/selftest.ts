@@ -107,6 +107,132 @@ test("PlayBoard exposes the tutorial overlay prop types", () => {
   }
 });
 
+// ── Phase 3: /play/ storage + unlock rules ──────────────────────────────────
+// The storage module reads globalThis.localStorage lazily on each call, so
+// installing a fake (or a throwing fake) before use is enough. We install a
+// fresh in-memory store per test and remove it afterwards.
+
+interface FakeStore extends Storage {
+  _map: Map<string, string>;
+}
+function makeStore(): FakeStore {
+  const m = new Map<string, string>();
+  const s: FakeStore = {
+    _map: m,
+    get length() { return m.size; },
+    clear: () => m.clear(),
+    getItem: (k: string) => (m.has(k) ? m.get(k)! : null),
+    setItem: (k: string, v: string) => { m.set(k, String(v)); },
+    removeItem: (k: string) => { m.delete(k); },
+    key: (i: number) => Array.from(m.keys())[i] ?? null,
+  };
+  return s;
+}
+function makeThrowingStore(): Storage {
+  const bomb = () => { throw new Error("storage unavailable"); };
+  return {
+    get length(): number { throw new Error("storage unavailable"); },
+    clear: bomb, getItem: bomb, setItem: bomb, removeItem: bomb, key: bomb,
+  } as unknown as Storage;
+}
+function installStore(s: Storage | undefined): void {
+  (globalThis as { localStorage?: Storage }).localStorage = s as Storage;
+}
+
+// Import once; all storage tests share the module (functions re-read storage).
+const storage = await import("../src/play/storage");
+
+test("storage helpers return defaults when storage throws", () => {
+  installStore(makeThrowingStore());
+  try {
+    assert(Object.keys(storage.loadProgress()).length === 0, "loadProgress should default to {} when storage throws");
+    assert(storage.getTutorialSeen() === false, "getTutorialSeen should default to false when storage throws");
+    assert(storage.hasLevelState("easy") === false, "hasLevelState should default to false when storage throws");
+    assert(storage.loadLevelState("easy") === null, "loadLevelState should default to null when storage throws");
+    // Writes must not throw.
+    storage.saveProgress({ easy: { solved: true, bestSeconds: 10, hints: 0 } });
+    storage.setTutorialSeen(true);
+    storage.saveLevelState("easy", { a: 1 });
+    storage.resetAllProgress();
+  } finally {
+    installStore(undefined);
+  }
+});
+
+test("progress round-trips through storage", () => {
+  installStore(makeStore());
+  try {
+    const written = storage.recordSolve("easy", 42, 2);
+    assert(written.easy?.solved === true, "recordSolve should mark easy solved");
+    assert(written.easy?.bestSeconds === 42, "recordSolve should store the time");
+    const reloaded = storage.loadProgress();
+    assert(reloaded.easy?.solved === true && reloaded.easy?.bestSeconds === 42 && reloaded.easy?.hints === 2, "progress should round-trip");
+    // A worse time never replaces the best; a better time does.
+    storage.recordSolve("easy", 99, 5);
+    assert(storage.loadProgress().easy?.bestSeconds === 42, "a slower run must not worsen the best time");
+    storage.recordSolve("easy", 30, 1);
+    assert(storage.loadProgress().easy?.bestSeconds === 30, "a faster run must become the new best time");
+  } finally {
+    installStore(undefined);
+  }
+});
+
+test("corrupt progress value falls back to defaults", () => {
+  const s = makeStore();
+  s.setItem("gog-play-progress", "{not valid json");
+  installStore(s);
+  try {
+    assert(Object.keys(storage.loadProgress()).length === 0, "corrupt progress JSON should yield {}");
+  } finally {
+    installStore(undefined);
+  }
+});
+
+test("unlock rules: Medium needs Easy, Hard needs Medium", () => {
+  // Nothing solved.
+  let p = {} as import("../src/play/storage").ProgressMap;
+  assert(storage.isUnlocked("easy", p) === true, "Easy is always unlocked");
+  assert(storage.isUnlocked("medium", p) === false, "Medium is locked until Easy is solved");
+  assert(storage.isUnlocked("hard", p) === false, "Hard is locked until Medium is solved");
+  assert(storage.lockMessage("medium", p) === "Solve Easy to unlock", "Medium lock message");
+  assert(storage.lockMessage("hard", p) === "Solve Medium to unlock", "Hard lock message");
+
+  // Easy solved → Medium opens, Hard still locked.
+  p = { easy: { solved: true, bestSeconds: 10, hints: 0 } };
+  assert(storage.isUnlocked("medium", p) === true, "Medium unlocks once Easy is solved");
+  assert(storage.isUnlocked("hard", p) === false, "Hard stays locked until Medium is solved");
+  assert(storage.lockMessage("medium", p) === null, "an unlocked level has no lock message");
+
+  // Medium solved → Hard opens.
+  p = { easy: { solved: true, bestSeconds: 10, hints: 0 }, medium: { solved: true, bestSeconds: 20, hints: 1 } };
+  assert(storage.isUnlocked("hard", p) === true, "Hard unlocks once Medium is solved");
+});
+
+test("resetAllProgress clears only gog-play- keys", () => {
+  const s = makeStore();
+  s.setItem("gog-play-progress", "{}");
+  s.setItem("gog-play-tutorial-seen", "true");
+  s.setItem("gog-play-state-easy", "{}");
+  s.setItem("some-other-app", "keep-me");
+  installStore(s);
+  try {
+    storage.resetAllProgress();
+    assert(s.getItem("gog-play-progress") === null, "reset should remove the progress key");
+    assert(s.getItem("gog-play-tutorial-seen") === null, "reset should remove the tutorial flag");
+    assert(s.getItem("gog-play-state-easy") === null, "reset should remove level state");
+    assert(s.getItem("some-other-app") === "keep-me", "reset must not touch non-gog-play keys");
+  } finally {
+    installStore(undefined);
+  }
+});
+
+test("formatTime renders m:ss", () => {
+  assert(storage.formatTime(0) === "0:00", "0s → 0:00");
+  assert(storage.formatTime(9) === "0:09", "9s → 0:09");
+  assert(storage.formatTime(65) === "1:05", "65s → 1:05");
+  assert(storage.formatTime(600) === "10:00", "600s → 10:00");
+});
+
 // ── Runner ─────────────────────────────────────────────────────────────────
 async function main(): Promise<void> {
   let failures = 0;

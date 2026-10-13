@@ -73,7 +73,7 @@ The board takes a `GeneratedLevel` plus board state, and supports what both the 
 
 ---
 
-## [ ] Phase 3 — `/play/` entry and landing screen
+## [x] Phase 3 — `/play/` entry and landing screen  <!-- Added play/index.html + src/play/ (main, LevelsApp state machine, LandingScreen, storage); second vite entry; storage/unlock self-tests; reviewer PASS. -->
 
 - Add `play/index.html` (copy the head of `index.html` — fonts, meta, viewport) mounting `src/play/main.tsx` → `LevelsApp`. Add it to `build.rollupOptions.input` in `vite.config.ts` alongside the existing entry. The existing `index.html` and its app are untouched.
 - Must work at both `/play/` in dev and under the GitHub Pages base path in a Pages build (`base` already handles the repo name).
@@ -225,3 +225,6 @@ Rebuild for `/play/` only, as a new component (do not edit `HowToPlayModal.tsx`,
 - Phase 1 ❓ Frozen level data isn't in the app bundle yet (tree-shaken until Phase 3/4 wires `LEVELS` in); bundling + no-fetch proven via esbuild for now.
 - Phase 1 ⚪ `clues.ts` "below" branch keeps a pre-existing no-op `getOtherCell(...)` call; could be dropped.
 - Phase 2 ❓ Undo of a drag-paint still steps one cell at a time, exactly as the generator always did (Phase 4 wants a whole stroke = one undo for `/play/`).
+- Phase 3 ❓ Solved sheet shows a "{Level} solved" header above the spec's "You solved this in {time}." line.
+- Phase 3 ❓ How-to-play overlay copy is written fresh (not lifted from the daily game's How to Play screen); closes via "Got it" only.
+- Phase 3 ❓ `play/index.html` is marked `noindex, nofollow` (matches the daily page).
