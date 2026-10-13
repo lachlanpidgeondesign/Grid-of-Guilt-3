@@ -137,7 +137,7 @@ Layout reference: `docs/design-ref/level-layout.png`. Match it on mobile; where 
 
 ---
 
-## [ ] Phase 5 — Tutorial · CHECKPOINT
+## [x] Phase 5 — Tutorial · CHECKPOINT  <!-- Built src/play/TutorialScreen (7 steps on PlayBoard), tutorialLevel.json/.ts (cast Adam/Tom/Ruby/Kate/Eve, Eve murderer), tutorialGuard.ts (most-constrained + forced guard → Ruby→Kate→Eve); additive PlayBoard props suspects? + traySuspectIdxs?; ?debug&open=tutorial; 4 self-tests (20 total); reviewer PASS round 2. -->
 
 Rebuild the tutorial on `PlayBoard` inside `/play/`. Do not reuse or edit `src/app/components/TutorialScreen.tsx`. Reference frames are in `docs/tutorial-ref/` ("Tutorial v2 - 1.png" … "Tutorial v2 - 7.png"); match their layout. Where this plan differs from the frames, the plan wins.
 
@@ -233,3 +233,8 @@ Rebuild for `/play/` only, as a new component (do not edit `HowToPlayModal.tsx`,
 - Phase 4 ❓ Win→results delay is 1500ms (0 under reduced motion).
 - Phase 4 ❓ Added a QA deep-link `?debug&open=easy|medium|hard` that opens a level board directly (gated behind `?debug`, used for screenshots/testing).
 - Phase 4 ❓ Hint is unlimited + counted; pressing Hint reveals the next step (toggle hides it); the count only increments on reveal.
+- Phase 5 ❓ Tutorial timings: veto hold 1.8s (1.2s reduced-motion), X-rule auto-advance 400ms (0 reduced-motion), step 6→7 reveal 900ms (0 reduced-motion).
+- Phase 5 ❓ Step 7 keeps the constant "How to Play Grid of Guilt" title with "Eve is the murderer!" as a Literata extrabold sub-heading below it (matches reference frame 7; plan called it a heading).
+- Phase 5 ❓ Tutorial cast sprites/colours are borrowed from the shared avatar sheet (Adam/Tom/Ruby/Kate/Eve are distinct faces, not bespoke art).
+- Phase 5 ❓ Added additive PlayBoard props `suspects?` (tutorial cast) and `traySuspectIdxs?` (show one suspect at a time); generator and level player pass neither, so their behaviour is unchanged.
+- Phase 5 ❓ Added a QA deep-link `?debug&open=tutorial` that opens the tutorial directly (gated behind `?debug`).

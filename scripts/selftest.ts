@@ -293,6 +293,71 @@ test("level state round-trips and corrupt state is rejected", () => {
   }
 });
 
+// ── Phase 5: tutorial level + forced-placement guard ────────────────────────
+const tutorialLevel = await import("../src/play/tutorialLevel");
+const tutorialGuard = await import("../src/play/tutorialGuard");
+
+type TCell = number | "X" | "dot" | "skull" | null;
+function tutorialGridWith(...placedIdxs: number[]): TCell[][] {
+  const L = tutorialLevel.TUTORIAL_LEVEL;
+  const g: TCell[][] = Array.from({ length: L.N }, () => Array<TCell>(L.N).fill(null));
+  const [ar, ac] = L.sol[L.starterIdx];
+  g[ar][ac] = L.starterIdx; // Adam (starter) is always on the board
+  const cs = L.crimeSceneCell;
+  if (cs) g[cs[0]][cs[1]] = "skull";
+  for (const idx of placedIdxs) {
+    const [r, c] = L.sol[idx];
+    g[r][c] = idx;
+  }
+  return g;
+}
+
+test("tutorial level has exactly one solution", () => {
+  const res = countSolutions(tutorialLevel.TUTORIAL_LEVEL, 2);
+  assert(!res.budgetExceeded, "tutorial: solution count budget exceeded");
+  assert(res.count === 1, `tutorial: expected 1 solution, got ${res.count}`);
+});
+
+test("tutorial clues are true at the solution", () => {
+  const L = tutorialLevel.TUTORIAL_LEVEL;
+  for (let i = 0; i < L.N; i++) {
+    const [r, c] = L.sol[i];
+    assert(L.clues[i].check(r, c), `tutorial: clue ${i} false at its solution cell`);
+  }
+});
+
+test("tutorial guard enforces Ruby → Kate → Eve", () => {
+  const TOM = 1, RUBY = 2, KATE = 3, EVE = 4;
+  const L = tutorialLevel.TUTORIAL_LEVEL;
+  const sol = L.sol;
+  const active = [RUBY, KATE, EVE];
+  const guard = tutorialGuard.tutorialGuard;
+
+  // After Tom is placed, Ruby is forced but Kate and Eve are not.
+  let g = tutorialGridWith(TOM);
+  assert(guard(g, RUBY, sol[RUBY][0], sol[RUBY][1], active) === true, "Ruby should be accepted first");
+  assert(guard(g, KATE, sol[KATE][0], sol[KATE][1], active) !== true, "Kate must be rejected before Ruby");
+  assert(guard(g, EVE, sol[EVE][0], sol[EVE][1], active) !== true, "Eve must be rejected before Ruby");
+
+  // After Ruby, Kate becomes forced but Eve is still not.
+  g = tutorialGridWith(TOM, RUBY);
+  assert(guard(g, KATE, sol[KATE][0], sol[KATE][1], active) === true, "Kate should be accepted after Ruby");
+  assert(guard(g, EVE, sol[EVE][0], sol[EVE][1], active) !== true, "Eve must be rejected until Kate is placed");
+
+  // After Ruby and Kate, Eve is finally forced.
+  g = tutorialGridWith(TOM, RUBY, KATE);
+  assert(guard(g, EVE, sol[EVE][0], sol[EVE][1], active) === true, "Eve should be accepted once Ruby and Kate are placed");
+});
+
+test("tutorial guard rejects an illegal cell with a distinct message", () => {
+  const TOM = 1;
+  const guard = tutorialGuard.tutorialGuard;
+  // Tom on his own cell's column (illegal) is not the same as "not yet".
+  const g = tutorialGridWith();
+  const verdict = guard(g, TOM, 2, 2, [TOM]); // a cell Tom cannot legally occupy
+  assert(typeof verdict === "string" && /can't go there/.test(verdict), "an illegal cell should say the suspect can't go there");
+});
+
 // ── Runner ─────────────────────────────────────────────────────────────────
 async function main(): Promise<void> {
   let failures = 0;

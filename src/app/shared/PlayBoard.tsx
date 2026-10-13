@@ -373,6 +373,9 @@ export interface PlayBoardProps {
   level: GeneratedLevel;
   /** Square board size in px (parent owns responsive sizing). */
   gridSize: number;
+  /** Suspect roster (names, colours, sprites). Defaults to suspectsForSize(N);
+   *  the tutorial supplies its own cast. */
+  suspects?: GeneratorSuspect[];
   /** Show the suspect name under the avatar on the board (false for large N). */
   showNameOnBoard: boolean;
   /** Starting grid; defaults to starter + body pre-placed. */
@@ -395,6 +398,9 @@ export interface PlayBoardProps {
   /** Draw the pale shelf bar under the flow tray (default true). Ignored when
    *  trayColumns is set. */
   trayShelf?: boolean;
+  /** Restrict the tray to these suspect indices (others are hidden). The
+   *  tutorial uses this to show one suspect at a time. Omit for all suspects. */
+  traySuspectIdxs?: number[];
   /** Slot rendered between the board and the tray (e.g. the generator buttons). */
   betweenBoardAndTray?: ReactNode;
   // ── Hint overlays (generator + play) ──
@@ -424,7 +430,7 @@ function PlayBoardInner(props: PlayBoardProps, ref: React.Ref<PlayBoardHandle>) 
     level, gridSize, showNameOnBoard,
     initialGrid, initialHistory,
     locked = false, won = false, allowTray = true,
-    trayPortal, trayColumns, trayShelf = true,
+    trayPortal, trayColumns, trayShelf = true, traySuspectIdxs,
     betweenBoardAndTray,
     hintCells, hintPendingCells,
     dimmedCells, hatchedCells, xOnlyCells,
@@ -433,7 +439,7 @@ function PlayBoardInner(props: PlayBoardProps, ref: React.Ref<PlayBoardHandle>) 
 
   const N = level.N;
   const map = level.map;
-  const suspects: GeneratorSuspect[] = suspectsForSize(N);
+  const suspects: GeneratorSuspect[] = props.suspects ?? suspectsForSize(N);
 
   const [starterRow, starterCol] = level.sol[level.starterIdx];
   const crime = level.crimeSceneCell;
@@ -843,6 +849,8 @@ function PlayBoardInner(props: PlayBoardProps, ref: React.Ref<PlayBoardHandle>) 
   const labelFont = Math.max(12, 15 * (gridSize / REFERENCE_GRID_WIDTH));
   const hintCellSet = hintCells ?? null;
   const hintPendingSet = hintPendingCells ?? null;
+  const traySet = traySuspectIdxs ? new Set(traySuspectIdxs) : null;
+  const inTray = (idx: number) => idx !== level.starterIdx && (!traySet || traySet.has(idx));
 
   const trayTile = (s: (typeof suspects)[number], idx: number) => (
     <div style={{ width: trayTileSize, height: trayTileSize }}>
@@ -875,7 +883,7 @@ function PlayBoardInner(props: PlayBoardProps, ref: React.Ref<PlayBoardHandle>) 
           }}
         >
           {suspects.map((s, idx) => {
-            if (idx === level.starterIdx) return null; // starter pinned on board
+            if (!inTray(idx)) return null; // starter pinned / filtered out
             const isPlaced = placedSuspects.has(idx);
             const isDragging = dragState?.idx === idx;
             const hidden = isPlaced || isDragging;
@@ -906,7 +914,7 @@ function PlayBoardInner(props: PlayBoardProps, ref: React.Ref<PlayBoardHandle>) 
     <div ref={trayRef} className="w-full shrink-0 relative" style={{ paddingTop: `${32 * cellScale}px`, touchAction: "none" }}>
       <div className="flex justify-center items-end z-10 relative flex-wrap" style={{ marginTop: `${-24 * cellScale}px`, rowGap: `${8 * cellScale}px` }}>
         {suspects.map((s, idx) => {
-          if (idx === level.starterIdx) return null; // starter pinned on board
+          if (!inTray(idx)) return null; // starter pinned / filtered out
           const isPlaced = placedSuspects.has(idx);
           const isDragging = dragState?.idx === idx;
           return (

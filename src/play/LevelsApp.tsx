@@ -9,6 +9,7 @@ import type { LevelId } from "../app/levels/loadLevel";
 import LandingScreen from "./LandingScreen";
 import LevelPlayer, { type SolveResult } from "./LevelPlayer";
 import ResultsScreen from "./ResultsScreen";
+import TutorialScreen from "./TutorialScreen";
 import {
   loadProgress,
   getTutorialSeen,
@@ -33,8 +34,9 @@ function hasDebugFlag(): boolean {
 }
 
 // Debug deep-link (QA/screenshots): with `?debug` present, `?open=easy|medium|
-// hard` opens that level's board directly, bypassing the tutorial gate. Ignored
-// in a normal production URL and for any other value.
+// hard` opens that level's board directly, bypassing the tutorial gate, and
+// `?open=tutorial` opens the tutorial. Ignored in a normal production URL and
+// for any other value.
 function debugOpenLevel(): LevelId | null {
   try {
     const params = new URLSearchParams(window.location.search);
@@ -46,36 +48,21 @@ function debugOpenLevel(): LevelId | null {
   }
 }
 
-// Temporary placeholder for the not-yet-built tutorial (Phase 5). Its Skip
-// action mirrors the real tutorial: set the seen flag and go straight into the
-// level the player tapped. Keeps the state machine honest and the board
-// reachable before Phase 5 lands.
-function TutorialPlaceholder({ onSkip, onBack }: { onSkip: () => void; onBack: () => void }) {
-  return (
-    <div className="bg-[#01394b] fixed inset-0 flex flex-col items-center justify-center gap-[20px] px-[24px]" style={{ zIndex: 10001 }}>
-      <p className="font-['Literata',serif] font-extrabold text-[24px] text-[#fcfcfc] text-center">Tutorial</p>
-      <p className="font-['Inter',sans-serif] font-normal text-[14px] text-[#9fb6bd] text-center">The full tutorial arrives in a later phase.</p>
-      <div className="flex flex-col items-stretch gap-[10px] w-full max-w-[260px]">
-        <button
-          onClick={onSkip}
-          className="rounded-[50px] bg-[#fcfcfc] text-[#191919] font-['Inter',sans-serif] font-semibold text-[15px] px-[24px] py-[12px] border-none cursor-pointer"
-        >
-          Skip to game
-        </button>
-        <button
-          onClick={onBack}
-          className="rounded-[50px] bg-transparent text-[#fcfcfc] font-['Inter',sans-serif] font-semibold text-[15px] px-[24px] py-[12px] border border-[#678893] cursor-pointer"
-        >
-          Back to levels
-        </button>
-      </div>
-    </div>
-  );
+function debugOpenTutorial(): boolean {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.has("debug") && params.get("open") === "tutorial";
+  } catch {
+    return false;
+  }
 }
 
+// Finish the tutorial (Skip or Start game): remember it was seen and go straight
+// into the level the player tapped.
+
 export default function LevelsApp() {
-  const [screen, setScreen] = useState<Screen>(() => (debugOpenLevel() ? "level" : "landing"));
-  const [activeLevel, setActiveLevel] = useState<LevelId | null>(() => debugOpenLevel());
+  const [screen, setScreen] = useState<Screen>(() => (debugOpenTutorial() ? "tutorial" : debugOpenLevel() ? "level" : "landing"));
+  const [activeLevel, setActiveLevel] = useState<LevelId | null>(() => (debugOpenTutorial() ? "easy" : debugOpenLevel()));
   const [lastResult, setLastResult] = useState<SolveResult | null>(null);
   const [howToPlay, setHowToPlay] = useState(false);
   const [progress, setProgress] = useState<ProgressMap>(() => loadProgress());
@@ -144,7 +131,7 @@ export default function LevelsApp() {
   }, []);
 
   if (screen === "tutorial" && activeLevel) {
-    return <TutorialPlaceholder onSkip={handleSkipTutorial} onBack={handleBackToLanding} />;
+    return <TutorialScreen onFinish={handleSkipTutorial} />;
   }
   if (screen === "level" && activeLevel) {
     return (

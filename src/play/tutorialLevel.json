@@ -1,0 +1,39 @@
+{
+  "N": 5,
+  "map": [
+    [0, 1, 1, 1, 1],
+    [0, 2, 2, 3, 3],
+    [0, 2, 2, 3, 3],
+    [0, 0, 4, 4, 4],
+    [0, 0, 4, 4, 4]
+  ],
+  "rooms": [
+    { "name": "Bedroom", "fill": "#E08A2B", "dark": "#A9631A" },
+    { "name": "Kitchen", "fill": "#6C7AE0", "dark": "#4A56B0" },
+    { "name": "Hall", "fill": "#2FB3C4", "dark": "#1E8291" },
+    { "name": "Bathroom", "fill": "#35C07A", "dark": "#228B55" },
+    { "name": "Study", "fill": "#E06BA8", "dark": "#B04A82" }
+  ],
+  "sol": [
+    [3, 2],
+    [1, 1],
+    [0, 3],
+    [2, 4],
+    [4, 0]
+  ],
+  "cast": ["Adam", "Tom", "Ruby", "Kate", "Eve"],
+  "starterIdx": 0,
+  "murdererIdx": 4,
+  "crimeSceneCell": [2, 0],
+  "clues": [
+    null,
+    { "kind": "room", "room": "Hall" },
+    { "kind": "colParity", "parity": "even" },
+    { "kind": "column", "column": 5 },
+    { "kind": "relative", "relation": "below", "otherSuspectIdx": 2 }
+  ],
+  "doors": [],
+  "windows": [],
+  "doorCells": [],
+  "windowCells": []
+}
