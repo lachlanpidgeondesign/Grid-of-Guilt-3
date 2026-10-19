@@ -8,7 +8,7 @@
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { loadLevel, LEVELS, type LevelId } from "../src/app/levels/loadLevel";
+import { loadLevel, LEVELS, loadLevelClueSpecs, type LevelId } from "../src/app/levels/loadLevel";
 import { countSolutions, gradeNoGuess } from "../src/app/generator/constraintSolver";
 import { suspectsForSize } from "../src/app/generator/suspects";
 
@@ -159,6 +159,30 @@ test("storage helpers return defaults when storage throws", () => {
   }
 });
 
+test("intro-seen flag is per level, round-trips and survives a throw", () => {
+  installStore(makeStore());
+  try {
+    assert(storage.hasSeenIntro("easy") === false, "a fresh store has seen no intro");
+    storage.markIntroSeen("easy");
+    assert(storage.hasSeenIntro("easy") === true, "marking easy seen must persist");
+    assert(storage.hasSeenIntro("medium") === false, "marking easy must not affect medium");
+    storage.markIntroSeen("easy"); // idempotent — no throw, still seen
+    assert(storage.hasSeenIntro("easy") === true, "re-marking stays seen");
+    // Corrupt value → reads as "none seen", writes still succeed.
+    (globalThis as { localStorage?: Storage }).localStorage!.setItem("gog-play-intro-seen", "{broken");
+    assert(storage.hasSeenIntro("easy") === false, "corrupt intro-seen reads as none");
+  } finally {
+    installStore(undefined);
+  }
+  installStore(makeThrowingStore());
+  try {
+    assert(storage.hasSeenIntro("hard") === false, "hasSeenIntro defaults false when storage throws");
+    storage.markIntroSeen("hard"); // must not throw
+  } finally {
+    installStore(undefined);
+  }
+});
+
 test("progress round-trips through storage", () => {
   installStore(makeStore());
   try {
@@ -293,24 +317,8 @@ test("level state round-trips and corrupt state is rejected", () => {
   }
 });
 
-// ── Phase 5: tutorial level + forced-placement guard ────────────────────────
+// ── Phase 5: tutorial level ─────────────────────────────────────────────────
 const tutorialLevel = await import("../src/play/tutorialLevel");
-const tutorialGuard = await import("../src/play/tutorialGuard");
-
-type TCell = number | "X" | "dot" | "skull" | null;
-function tutorialGridWith(...placedIdxs: number[]): TCell[][] {
-  const L = tutorialLevel.TUTORIAL_LEVEL;
-  const g: TCell[][] = Array.from({ length: L.N }, () => Array<TCell>(L.N).fill(null));
-  const [ar, ac] = L.sol[L.starterIdx];
-  g[ar][ac] = L.starterIdx; // Adam (starter) is always on the board
-  const cs = L.crimeSceneCell;
-  if (cs) g[cs[0]][cs[1]] = "skull";
-  for (const idx of placedIdxs) {
-    const [r, c] = L.sol[idx];
-    g[r][c] = idx;
-  }
-  return g;
-}
 
 test("tutorial level has exactly one solution", () => {
   const res = countSolutions(tutorialLevel.TUTORIAL_LEVEL, 2);
@@ -326,37 +334,245 @@ test("tutorial clues are true at the solution", () => {
   }
 });
 
-test("tutorial guard enforces Ruby → Kate → Eve", () => {
-  const TOM = 1, RUBY = 2, KATE = 3, EVE = 4;
-  const L = tutorialLevel.TUTORIAL_LEVEL;
-  const sol = L.sol;
-  const active = [RUBY, KATE, EVE];
-  const guard = tutorialGuard.tutorialGuard;
+// ── /play/ hint flow: eliminations-first, then dot suggestions ──────────────
+const playHintPolicy = await import("../src/play/playHintPolicy");
+const playHint = await import("../src/play/playHint");
+const clues = await import("../src/app/levels/clues");
 
-  // After Tom is placed, Ruby is forced but Kate and Eve are not.
-  let g = tutorialGridWith(TOM);
-  assert(guard(g, RUBY, sol[RUBY][0], sol[RUBY][1], active) === true, "Ruby should be accepted first");
-  assert(guard(g, KATE, sol[KATE][0], sol[KATE][1], active) !== true, "Kate must be rejected before Ruby");
-  assert(guard(g, EVE, sol[EVE][0], sol[EVE][1], active) !== true, "Eve must be rejected before Ruby");
+type HCell = number | "X" | "dot" | "skull" | null;
 
-  // After Ruby, Kate becomes forced but Eve is still not.
-  g = tutorialGridWith(TOM, RUBY);
-  assert(guard(g, KATE, sol[KATE][0], sol[KATE][1], active) === true, "Kate should be accepted after Ruby");
-  assert(guard(g, EVE, sol[EVE][0], sol[EVE][1], active) !== true, "Eve must be rejected until Kate is placed");
+// A fresh board: starter pinned to its solution cell, body as skull, rest empty.
+function freshBoard(level: ReturnType<typeof loadLevel>): HCell[][] {
+  const g: HCell[][] = Array.from({ length: level.N }, () => Array<HCell>(level.N).fill(null));
+  const [sr, sc] = level.sol[level.starterIdx];
+  g[sr][sc] = level.starterIdx;
+  const cs = level.crimeSceneCell;
+  if (cs) g[cs[0]][cs[1]] = "skull";
+  return g;
+}
 
-  // After Ruby and Kate, Eve is finally forced.
-  g = tutorialGridWith(TOM, RUBY, KATE);
-  assert(guard(g, EVE, sol[EVE][0], sol[EVE][1], active) === true, "Eve should be accepted once Ruby and Kate are placed");
+test("play hint offers an elimination before any placement on a fresh board", () => {
+  const level = loadLevel("medium");
+  const step = playHintPolicy.nextPlayStep(level, freshBoard(level));
+  assert(step.kind === "eliminate", `expected an eliminate on a fresh board, got ${step.kind}`);
 });
 
-test("tutorial guard rejects an illegal cell with a distinct message", () => {
-  const TOM = 1;
-  const guard = tutorialGuard.tutorialGuard;
-  // Tom on his own cell's column (illegal) is not the same as "not yet".
-  const g = tutorialGridWith();
-  const verdict = guard(g, TOM, 2, 2, [TOM]); // a cell Tom cannot legally occupy
-  assert(typeof verdict === "string" && /can't go there/.test(verdict), "an illegal cell should say the suspect can't go there");
+test("play hint falls back to a placement when no X remains", () => {
+  const level = loadLevel("medium");
+  const N = level.N;
+  const missing = level.starterIdx === 0 ? 1 : 0;
+  const isSol = (r: number, c: number) => level.sol.some(([sr, sc], si) => si !== missing && sr === r && sc === c);
+  const g: HCell[][] = Array.from({ length: N }, () => Array<HCell>(N).fill(null));
+  const cs = level.crimeSceneCell;
+  for (let si = 0; si < N; si++) {
+    if (si === missing) continue;
+    const [r, c] = level.sol[si];
+    g[r][c] = si;
+  }
+  if (cs) g[cs[0]][cs[1]] = "skull";
+  // X every cell that is neither a placed solution cell, the missing suspect's
+  // cell, nor the body — so no forced elimination remains.
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (g[r][c] !== null) continue;
+      if (r === level.sol[missing][0] && c === level.sol[missing][1]) continue;
+      g[r][c] = "X";
+    }
+  }
+  const step = playHintPolicy.nextPlayStep(level, g);
+  assert(step.kind === "place", `expected a placement once X's are exhausted, got ${step.kind}`);
+  if (step.kind === "place") {
+    assert(step.targetCell[0] === level.sol[missing][0] && step.targetCell[1] === level.sol[missing][1],
+      "placement should target the missing suspect's solution cell");
+  }
 });
+
+test("play hint prefers an available X over an available placement", () => {
+  const level = loadLevel("medium");
+  const N = level.N;
+  const missing = level.starterIdx === 0 ? 1 : 0;
+  const g: HCell[][] = Array.from({ length: N }, () => Array<HCell>(N).fill(null));
+  const cs = level.crimeSceneCell;
+  for (let si = 0; si < N; si++) {
+    if (si === missing) continue;
+    const [r, c] = level.sol[si];
+    g[r][c] = si;
+  }
+  if (cs) g[cs[0]][cs[1]] = "skull";
+  // X everything except the missing suspect's cell AND one open cell in a
+  // placed suspect's row (geometry-excluded → still eliminable).
+  const [pr] = level.sol[level.starterIdx];
+  let leftOpen: [number, number] | null = null;
+  for (let c = 0; c < N && !leftOpen; c++) {
+    if (g[pr][c] === null && !(pr === level.sol[missing][0] && c === level.sol[missing][1]) && !(cs && pr === cs[0] && c === cs[1])) {
+      leftOpen = [pr, c];
+    }
+  }
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (g[r][c] !== null) continue;
+      if (r === level.sol[missing][0] && c === level.sol[missing][1]) continue;
+      if (leftOpen && r === leftOpen[0] && c === leftOpen[1]) continue;
+      g[r][c] = "X";
+    }
+  }
+  assert(leftOpen !== null, "test setup: expected an open cell in the starter's row");
+  const step = playHintPolicy.nextPlayStep(level, g);
+  assert(step.kind === "eliminate", `expected an eliminate while an X remains, got ${step.kind}`);
+});
+
+// Exhaust every forced X-elimination the board supports, as a player would.
+function exhaustEliminations(level: ReturnType<typeof loadLevel>, g: HCell[][]): void {
+  for (let guard = 0; guard < 4000; guard++) {
+    const e = playHintPolicy.findForcedElimination(level, g);
+    if (!e) return;
+    for (const [r, c] of e.targetCells) if (g[r][c] === null) g[r][c] = "X";
+  }
+}
+
+test("play hint suggests a dot when a unit is down to one open square", () => {
+  const level = loadLevel("easy");
+  const g = freshBoard(level);
+  exhaustEliminations(level, g);
+  const step = playHintPolicy.nextPlayStep(level, g);
+  assert(step.kind === "occupy", `expected a dot suggestion once X's are exhausted, got ${step.kind}`);
+  if (step.kind === "occupy") {
+    const [r, c] = step.cell;
+    assert(g[r][c] === null, "the suggested dot cell must be open");
+    assert(level.sol.some(([sr, sc]) => sr === r && sc === c), "the forced-occupied cell must be a solution cell");
+  }
+});
+
+test("play hint dot suggestion names a dot and stripes exactly one cell", () => {
+  const level = loadLevel("easy");
+  const names = suspectsForSize(level.N).map((s) => s.name);
+  const g = freshBoard(level);
+  exhaustEliminations(level, g);
+  const { hint } = playHint.computeHint(level, g, names, loadLevelClueSpecs("easy"));
+  assert(/place a dot/i.test(hint.text), `dot hint should tell the player to place a dot, got: ${hint.text}`);
+  assert(hint.pendingCells.size === 1, "a dot suggestion stripes exactly one cell");
+  // The wording must never name a suspect at the dot stage.
+  assert(!names.some((n) => hint.text.includes(n)), "a dot suggestion must not name a suspect");
+});
+
+test("play hint explains the clue when placing by clue-single", () => {
+  const level = loadLevel("medium");
+  const names = suspectsForSize(level.N).map((s) => s.name);
+  const specs = loadLevelClueSpecs("medium");
+  const N = level.N;
+  const missing = level.starterIdx === 0 ? 1 : 0;
+  const g: HCell[][] = Array.from({ length: N }, () => Array<HCell>(N).fill(null));
+  const cs = level.crimeSceneCell;
+  for (let si = 0; si < N; si++) {
+    if (si === missing) continue;
+    const [r, c] = level.sol[si];
+    g[r][c] = si;
+  }
+  if (cs) g[cs[0]][cs[1]] = "skull";
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (g[r][c] !== null) continue;
+      if (r === level.sol[missing][0] && c === level.sol[missing][1]) continue;
+      g[r][c] = "X";
+    }
+  }
+  const step = playHintPolicy.nextPlayStep(level, g);
+  assert(step.kind === "place" && step.rule === "clue-single", `expected a clue-single placement, got ${step.kind}`);
+  const { hint } = playHint.computeHint(level, g, names, specs);
+  const spec = specs[missing];
+  assert(spec !== null, "test setup: the missing suspect should have a clue");
+  if (spec) {
+    const phrase = clues.clueText(spec, level, names).replace(/<\/?em>/g, "");
+    assert(hint.text.includes(phrase), `clue-single hint should state the clue "${phrase}", got: ${hint.text}`);
+    assert(hint.text.includes(names[missing]), "clue-single hint should name the suspect");
+  }
+});
+
+// Apply a hint step to the board exactly as a player following it would.
+function applyStep(step: ReturnType<typeof playHintPolicy.nextPlayStep>, g: HCell[][]): void {
+  if (step.kind === "eliminate") {
+    for (const [r, c] of step.targetCells) if (g[r][c] === null) g[r][c] = "X";
+  } else if (step.kind === "occupy") {
+    const [r, c] = step.cell;
+    if (g[r][c] === null) g[r][c] = "dot";
+  } else if (step.kind === "place") {
+    const [r, c] = step.targetCell;
+    if (step.suspectIdx !== null) g[r][c] = step.suspectIdx;
+  } else if (step.kind === "reasoned") {
+    if (step.outcome.kind === "eliminate") {
+      for (const [r, c] of step.outcome.targetCells) if (g[r][c] === null) g[r][c] = "X";
+    } else {
+      const [r, c] = step.outcome.targetCell;
+      g[r][c] = step.outcome.suspectIdx;
+    }
+  }
+}
+
+for (const id of ["easy", "medium", "hard"] as LevelId[]) {
+  test(`play hint reveals the murderer last (${id})`, () => {
+    const level = loadLevel(id);
+    const g = freshBoard(level);
+    // The order in which each suspect first appears on the board as a number.
+    const placedOrder: number[] = [];
+    const seen = new Set<number>();
+    const noteNumbers = () => {
+      for (let r = 0; r < level.N; r++) {
+        for (let c = 0; c < level.N; c++) {
+          const v = g[r][c];
+          if (typeof v === "number" && !seen.has(v)) { seen.add(v); placedOrder.push(v); }
+        }
+      }
+    };
+    noteNumbers(); // the pre-placed starter
+    for (let guard = 0; guard < 6000; guard++) {
+      const step = playHintPolicy.nextPlayStep(level, g);
+      if (step.kind === "solved" || step.kind === "none" || step.kind === "inconsistent") break;
+      applyStep(step, g);
+      noteNumbers();
+      if (seen.size === level.N) break;
+    }
+    assert(seen.size === level.N, `hints should resolve every suspect (${id}): got ${seen.size}/${level.N}`);
+    assert(placedOrder[placedOrder.length - 1] === level.murdererIdx,
+      `the murderer should be the last suspect a hint names (${id}): order ${placedOrder.join(",")}, murderer ${level.murdererIdx}`);
+  });
+}
+
+
+// ── /play/ intro animation geometry ─────────────────────────────────────────
+const introAnim = await import("../src/play/introAnim");
+
+test("intro easing clamps and hits its endpoints", () => {
+  assert(introAnim.easeOutCubic(0) === 0, "easeOutCubic(0) === 0");
+  assert(introAnim.easeOutCubic(1) === 1, "easeOutCubic(1) === 1");
+  assert(introAnim.easeOutCubic(-5) === 0 && introAnim.easeOutCubic(5) === 1, "easeOutCubic clamps out-of-range t");
+});
+
+for (const id of ["easy", "medium", "hard"] as LevelId[]) {
+  test(`intro search homes exactly on the body (${id})`, () => {
+    const level = loadLevel(id);
+    const crime = level.crimeSceneCell;
+    assert(crime !== null, `level ${id} must have a crime-scene cell`);
+    if (!crime) return;
+    const gridSize = 400;
+    const cellSize = gridSize / level.N;
+    const body = introAnim.bodyCenterPx(crime, cellSize);
+    // Body centre sits inside the body cell's bounds.
+    assert(body.x > crime[1] * cellSize && body.x < (crime[1] + 1) * cellSize, "body x within its cell");
+    assert(body.y > crime[0] * cellSize && body.y < (crime[0] + 1) * cellSize, "body y within its cell");
+    // At the end of the scan, the lead light is exactly on the body — the key
+    // adaptive property, wherever the body is on this level.
+    const scanEnd = introAnim.scanLightPositions(1, crime, cellSize, gridSize);
+    const near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
+    assert(near(scanEnd[0].x, body.x) && near(scanEnd[0].y, body.y), "lead light ends on the body");
+    // Lights begin at their spread search origins (not the body).
+    const starts = introAnim.flashlightStartsPx(gridSize);
+    const scanStart = introAnim.scanLightPositions(0, crime, cellSize, gridSize);
+    assert(near(scanStart[0].x, starts[0].x) && near(scanStart[0].y, starts[0].y), "lights start at their origins");
+    // In the found phase every light converges onto the body.
+    const found = introAnim.foundLightPositions(1, scanEnd, crime, cellSize);
+    assert(found.every((p) => near(p.x, body.x) && near(p.y, body.y)), "all lights converge on the body");
+  });
+}
 
 // ── Runner ─────────────────────────────────────────────────────────────────
 async function main(): Promise<void> {

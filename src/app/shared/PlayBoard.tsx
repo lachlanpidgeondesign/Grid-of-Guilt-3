@@ -29,6 +29,16 @@ import SuspectTile from "./SuspectTile";
 import { getRoomBorderEdges, doorSuppressedEdgeSet, DOOR_GAP_FRACTION } from "./boardGeometry";
 import type { GeneratedLevel } from "../generator/puzzleGenerator";
 import { suspectsForSize, type GeneratorSuspect } from "../generator/suspects";
+import {
+  scanLightPositions,
+  foundLightPositions,
+  bodyCenterPx,
+  lightRadiusPx,
+  INTRO_SCAN_MS,
+  INTRO_FOUND_MS,
+  INTRO_REVEAL_MS,
+  type Pt,
+} from "../../play/introAnim";
 
 // ── Reference constants (shared with the generator chrome) ────────────
 // At 5x5 the daily game uses gridScale = gridSize / 358 and a per-cell
@@ -175,6 +185,228 @@ function SkullIcon({ scale = 1 }: { scale?: number }) {
       className="shrink-0 object-contain pointer-events-none"
       style={{ width: size, height: size }}
     />
+  );
+}
+
+// ── Intro "searching for the body" animation ──────────────────────────
+// Ported from the daily game (src/app/components/PuzzleGame.tsx) and made
+// adaptive: four flashlights cut through a dark overlay via a radial-gradient
+// mask, roaming the grid before the lead light homes exactly on THIS level's
+// body. All geometry comes from src/play/introAnim.ts. Rendered inside the
+// grid container so its pixel coordinates match the board. Tap to skip.
+function IntroSearchOverlay({
+  gridSize, crimeCell, cellSize, borderRadius, onDone, onPhase,
+}: {
+  gridSize: number;
+  crimeCell: [number, number];
+  cellSize: number;
+  borderRadius: number;
+  onDone: () => void;
+  onPhase?: (phase: "scanning" | "found" | "revealing") => void;
+}) {
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef(0);
+  const frozenRef = useRef<Pt[]>([]);
+  const doneRef = useRef(false);
+  const [phase, setPhase] = useState<"scanning" | "found" | "revealing">("scanning");
+  const [showExclamation, setShowExclamation] = useState(false);
+
+  // Let the board know which phase we're in (it hides the body until "found").
+  const onPhaseRef = useRef(onPhase);
+  onPhaseRef.current = onPhase;
+  useEffect(() => { onPhaseRef.current?.(phase); }, [phase]);
+
+  const now = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
+
+  const applyVars = useCallback((pts: Pt[]) => {
+    const el = overlayRef.current;
+    if (!el) return;
+    pts.forEach((p, i) => {
+      el.style.setProperty(`--f${i + 1}x`, `${p.x}px`);
+      el.style.setProperty(`--f${i + 1}y`, `${p.y}px`);
+    });
+    el.style.setProperty("--fr", `${lightRadiusPx(gridSize)}px`);
+  }, [gridSize]);
+
+  const finish = useCallback(() => {
+    if (doneRef.current) return;
+    doneRef.current = true;
+    cancelAnimationFrame(rafRef.current);
+    onDone();
+  }, [onDone]);
+
+  useEffect(() => {
+    if (phase === "revealing") {
+      const id = setTimeout(finish, INTRO_REVEAL_MS);
+      return () => clearTimeout(id);
+    }
+    const start = now();
+    const animate = () => {
+      const elapsed = now() - start;
+      if (phase === "scanning") {
+        const t = Math.min(elapsed / INTRO_SCAN_MS, 1);
+        const pts = scanLightPositions(t, crimeCell, cellSize, gridSize);
+        applyVars(pts);
+        if (t >= 1) {
+          frozenRef.current = pts;
+          setShowExclamation(true);
+          setPhase("found");
+          return;
+        }
+      } else {
+        const t = Math.min(elapsed / INTRO_FOUND_MS, 1);
+        applyVars(foundLightPositions(t, frozenRef.current, crimeCell, cellSize));
+        if (t >= 1) {
+          setPhase("revealing");
+          return;
+        }
+      }
+      rafRef.current = requestAnimationFrame(animate);
+    };
+    rafRef.current = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [phase, crimeCell, cellSize, gridSize, applyVars, finish]);
+
+  const body = bodyCenterPx(crimeCell, cellSize);
+  const init = scanLightPositions(0, crimeCell, cellSize, gridSize);
+  const r = lightRadiusPx(gridSize);
+  const cssVars = {
+    "--f1x": `${init[0].x}px`, "--f1y": `${init[0].y}px`,
+    "--f2x": `${init[1].x}px`, "--f2y": `${init[1].y}px`,
+    "--f3x": `${init[2].x}px`, "--f3y": `${init[2].y}px`,
+    "--f4x": `${init[3].x}px`, "--f4y": `${init[3].y}px`,
+    "--fr": `${r}px`,
+  } as React.CSSProperties;
+
+  return (
+    <>
+      <style>{`
+        .gog-intro-dark {
+          background: rgba(0,0,0,0.92);
+          -webkit-mask-image:
+            radial-gradient(circle var(--fr) at var(--f1x) var(--f1y), transparent 30%, black 90%),
+            radial-gradient(circle var(--fr) at var(--f2x) var(--f2y), transparent 30%, black 90%),
+            radial-gradient(circle var(--fr) at var(--f3x) var(--f3y), transparent 30%, black 90%),
+            radial-gradient(circle var(--fr) at var(--f4x) var(--f4y), transparent 30%, black 90%);
+          -webkit-mask-composite: source-in, source-in, source-in;
+          mask-image:
+            radial-gradient(circle var(--fr) at var(--f1x) var(--f1y), transparent 30%, black 90%),
+            radial-gradient(circle var(--fr) at var(--f2x) var(--f2y), transparent 30%, black 90%),
+            radial-gradient(circle var(--fr) at var(--f3x) var(--f3y), transparent 30%, black 90%),
+            radial-gradient(circle var(--fr) at var(--f4x) var(--f4y), transparent 30%, black 90%);
+          mask-composite: intersect;
+        }
+        @keyframes gog-intro-fade { from { opacity: 1; } to { opacity: 0; } }
+        @keyframes gog-intro-skull-pulse {
+          0%, 100% { box-shadow: 0 0 15px 5px rgba(255,0,0,0.3); }
+          50% { box-shadow: 0 0 25px 10px rgba(255,0,0,0.6); }
+        }
+        .gog-intro-skull-glow { animation: gog-intro-skull-pulse 0.8s ease-in-out infinite; }
+        @keyframes gog-intro-exclamation-pop {
+          0% { transform: translate(-50%, -50%) scale(0) rotate(-20deg); opacity: 0; }
+          50% { transform: translate(-50%, -50%) scale(1.3) rotate(5deg); opacity: 1; }
+          100% { transform: translate(-50%, -50%) scale(1) rotate(0deg); opacity: 1; }
+        }
+        .gog-intro-exclamation { animation: gog-intro-exclamation-pop 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+      `}</style>
+      {/* Tap anywhere to skip the intro. */}
+      <div className="absolute inset-0" style={{ zIndex: 51 }} onPointerDown={finish} />
+      {phase !== "revealing" ? (
+        <div
+          ref={overlayRef}
+          className="absolute inset-0 pointer-events-none gog-intro-dark"
+          style={{ zIndex: 50, borderRadius, ...cssVars }}
+        />
+      ) : (
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ zIndex: 50, borderRadius, backgroundColor: "rgba(0,0,0,0.92)", animation: `gog-intro-fade ${INTRO_REVEAL_MS}ms ease-out forwards` }}
+        />
+      )}
+      {phase === "found" && (
+        <div
+          className="absolute pointer-events-none gog-intro-skull-glow"
+          style={{ left: crimeCell[1] * cellSize, top: crimeCell[0] * cellSize, width: cellSize, height: cellSize, zIndex: 49 }}
+        />
+      )}
+      {showExclamation && phase !== "revealing" && (
+        <div
+          className="absolute pointer-events-none gog-intro-exclamation"
+          style={{
+            left: body.x,
+            top: crimeCell[0] * cellSize - cellSize * 0.1,
+            zIndex: 52,
+            fontFamily: "'Literata', serif",
+            fontWeight: 800,
+            fontSize: cellSize * 0.8,
+            lineHeight: 1,
+            color: "#ff3b3b",
+            textShadow: "0 2px 6px rgba(0,0,0,0.7)",
+          }}
+        >
+          !
+        </div>
+      )}
+    </>
+  );
+}
+
+// ── Win "prison bars" animation ───────────────────────────────────────
+// Ported from the daily game: bars slide down over the murderer's cell on a
+// win. Honours prefers-reduced-motion (static bars, no slide, no haptics).
+function PlayJailBars({ cellSize }: { cellSize: number }) {
+  const barCount = 5;
+  const barWidth = Math.max(3, cellSize * 0.05);
+  const crossBarH = Math.max(3, cellSize * 0.045);
+  const reduce =
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  useEffect(() => {
+    if (reduce) return;
+    const nav = typeof navigator !== "undefined" ? navigator : undefined;
+    const startTap = setTimeout(() => { nav?.vibrate?.(10); }, 300);
+    const landThud = setTimeout(() => { nav?.vibrate?.([30, 40, 15]); }, 720);
+    return () => { clearTimeout(startTap); clearTimeout(landThud); };
+  }, [reduce]);
+
+  return (
+    <>
+      <style>{`
+        @keyframes gog-jail-slide-down {
+          0% { transform: translateY(-100%); }
+          60% { transform: translateY(4%); }
+          75% { transform: translateY(-2%); }
+          100% { transform: translateY(0%); }
+        }
+      `}</style>
+      <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 8 }}>
+        <div
+          className="absolute inset-0"
+          style={reduce ? undefined : { animation: "gog-jail-slide-down 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.3s both" }}
+        >
+          <svg
+            className="absolute pointer-events-none"
+            style={{ left: 0, top: 0, width: "100%", height: "100%" }}
+            viewBox={`0 0 ${cellSize} ${cellSize}`}
+            fill="none"
+            preserveAspectRatio="none"
+          >
+            {Array.from({ length: barCount }, (_, i) => {
+              const x = (cellSize / (barCount + 1)) * (i + 1);
+              return (
+                <rect key={`v${i}`} x={x - barWidth / 2} y={0} width={barWidth} height={cellSize} rx={barWidth / 2} fill="#3a3a3a" />
+              );
+            })}
+            <rect x={0} y={cellSize * 0.08} width={cellSize} height={crossBarH} rx={crossBarH / 2} fill="#4a4a4a" />
+            <rect x={0} y={cellSize * 0.88} width={cellSize} height={crossBarH} rx={crossBarH / 2} fill="#4a4a4a" />
+            <rect x={0} y={cellSize * 0.48} width={cellSize} height={crossBarH} rx={crossBarH / 2} fill="#4a4a4a" />
+          </svg>
+          <div className="absolute inset-0 pointer-events-none" style={{ background: "rgba(0,0,0,0.08)", borderRadius: "inherit" }} />
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -401,6 +633,13 @@ export interface PlayBoardProps {
   /** Restrict the tray to these suspect indices (others are hidden). The
    *  tutorial uses this to show one suspect at a time. Omit for all suspects. */
   traySuspectIdxs?: number[];
+  /** Tray tiles for these suspects are shown greyed out and non-interactive
+   *  (the tutorial uses this to keep later suspects visible but locked). */
+  trayDisabledIdxs?: number[];
+  /** Explicit tile size (px) for the fixed-grid tray, overriding the default
+   *  64×cellScale. Lets /play/ grow the tiles to fill the available space on
+   *  the larger levels. Ignored by the flow tray (generator). */
+  trayTilePx?: number;
   /** Slot rendered between the board and the tray (e.g. the generator buttons). */
   betweenBoardAndTray?: ReactNode;
   // ── Hint overlays (generator + play) ──
@@ -423,6 +662,15 @@ export interface PlayBoardProps {
   onWin?: () => void;
   /** Called when a drop is vetoed (message may be null); cell is the target. */
   onVeto?: (message: string | null, cell: [number, number]) => void;
+  // ── Intro / win animations (inert when omitted) ──
+  /** Play the "searching for the body" flashlight intro over the board. The
+   *  parent locks the board while this runs and clears it via onIntroDone.
+   *  No-op when the level has no crime-scene cell. */
+  introPlay?: boolean;
+  /** Called once the intro animation finishes (or is tapped to skip). */
+  onIntroDone?: () => void;
+  /** When won, drop prison bars over the murderer's cell. */
+  celebrateWin?: boolean;
 }
 
 function PlayBoardInner(props: PlayBoardProps, ref: React.Ref<PlayBoardHandle>) {
@@ -430,11 +678,12 @@ function PlayBoardInner(props: PlayBoardProps, ref: React.Ref<PlayBoardHandle>) 
     level, gridSize, showNameOnBoard,
     initialGrid, initialHistory,
     locked = false, won = false, allowTray = true,
-    trayPortal, trayColumns, trayShelf = true, traySuspectIdxs,
+    trayPortal, trayColumns, trayShelf = true, traySuspectIdxs, trayDisabledIdxs, trayTilePx,
     betweenBoardAndTray,
     hintCells, hintPendingCells,
     dimmedCells, hatchedCells, xOnlyCells,
     canPlace, onChange, onWin, onVeto,
+    introPlay = false, onIntroDone, celebrateWin = false,
   } = props;
 
   const N = level.N;
@@ -458,6 +707,11 @@ function PlayBoardInner(props: PlayBoardProps, ref: React.Ref<PlayBoardHandle>) 
   const [actionHistory, setActionHistory] = useState<BoardAction[]>(() =>
     initialHistory ? [...initialHistory] : [],
   );
+
+  // Intro phase, so the body stays hidden under the flashlights until the
+  // "found" beat. Only meaningful while introPlay is true.
+  const [introPhase, setIntroPhase] = useState<"scanning" | "found" | "revealing">("scanning");
+  const hideBody = introPlay && crime != null && introPhase === "scanning";
 
   // Drag & drop state
   const [dragState, setDragState] = useState<{ idx: number; fromGrid: [number, number] | null } | null>(null);
@@ -672,7 +926,7 @@ function PlayBoardInner(props: PlayBoardProps, ref: React.Ref<PlayBoardHandle>) 
         if (cell) {
           const [row, col] = cell;
           const targetCell = ng[row][col];
-          const canDrop = (targetCell === null || targetCell === "X") && !isPinned(row, col) && !isDimmed(row, col);
+          const canDrop = (targetCell === null || targetCell === "X" || targetCell === "dot") && !isPinned(row, col) && !isDimmed(row, col);
           const verdict = canDrop && canPlace ? canPlace(idx, row, col) : true;
           if (canDrop && verdict === true) {
             ng[row][col] = idx;
@@ -851,34 +1105,42 @@ function PlayBoardInner(props: PlayBoardProps, ref: React.Ref<PlayBoardHandle>) 
   const hintPendingSet = hintPendingCells ?? null;
   const traySet = traySuspectIdxs ? new Set(traySuspectIdxs) : null;
   const inTray = (idx: number) => idx !== level.starterIdx && (!traySet || traySet.has(idx));
+  const trayDisabledSet = trayDisabledIdxs ? new Set(trayDisabledIdxs) : null;
+  const isTrayDisabled = (idx: number) => trayDisabledSet?.has(idx) ?? false;
 
-  const trayTile = (s: (typeof suspects)[number], idx: number) => (
-    <div style={{ width: trayTileSize, height: trayTileSize }}>
+  const trayTile = (s: (typeof suspects)[number], idx: number, size: number, scale: number) => (
+    <div style={{ width: size, height: size }}>
       <SuspectTile
         name={s.name}
         color={s.color}
         spritePos={s.sprite}
         showEveBadge={false}
         selected={selectedSuspect === idx}
-        gridScale={cellScale}
+        gridScale={scale}
         inGrid
       />
     </div>
   );
 
+  // Fixed-grid tray tiles may be grown to fill the available column (trayTilePx);
+  // gap, shelf and padding follow the tile scale so the block stays balanced.
+  const gridTrayTile = trayTilePx ?? trayTileSize;
+  const gridTrayScale = gridTrayTile / 64;
+  const gridTrayGap = 12 * gridTrayScale;
+
   // Fixed-grid tray (used by /play/): every suspect keeps a slot, so the area
   // never shrinks as suspects are placed. Placed/dragging tiles fade out in place.
   const gridTrayNode = allowTray && trayColumns != null ? (
-    <div ref={trayRef} className="w-full shrink-0 relative" style={{ paddingTop: `${16 * cellScale}px`, touchAction: "none" }}>
+    <div ref={trayRef} className="w-full shrink-0 relative" style={{ paddingTop: `${16 * gridTrayScale}px`, touchAction: "none" }}>
       {trayShelf && (
-        <div className="bg-[#e6ebed] absolute left-0 right-0 z-0" style={{ bottom: `${-8 * cellScale}px`, height: `${48 * cellScale}px` }} />
+        <div className="bg-[#e6ebed] absolute left-0 right-0 z-0" style={{ bottom: `${-8 * gridTrayScale}px`, height: `${48 * gridTrayScale}px` }} />
       )}
       <div className="relative z-10 flex justify-center">
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: `repeat(${trayColumns}, ${trayTileSize}px)`,
-            gap: `${trayGap}px`,
+            gridTemplateColumns: `repeat(${trayColumns}, ${gridTrayTile}px)`,
+            gap: `${gridTrayGap}px`,
             justifyContent: "center",
           }}
         >
@@ -886,22 +1148,24 @@ function PlayBoardInner(props: PlayBoardProps, ref: React.Ref<PlayBoardHandle>) 
             if (!inTray(idx)) return null; // starter pinned / filtered out
             const isPlaced = placedSuspects.has(idx);
             const isDragging = dragState?.idx === idx;
+            const disabled = isTrayDisabled(idx);
             const hidden = isPlaced || isDragging;
             return (
               <div
                 key={s.name}
                 style={{
-                  width: trayTileSize,
-                  height: trayTileSize,
-                  opacity: hidden ? 0 : 1,
+                  width: gridTrayTile,
+                  height: gridTrayTile,
+                  opacity: hidden ? 0 : disabled ? 0.4 : 1,
+                  filter: disabled && !hidden ? "grayscale(1)" : undefined,
                   transform: hidden ? "scale(0.5)" : "scale(1)",
                   transition: isDragging ? "none" : "opacity 0.25s ease, transform 0.3s ease",
-                  pointerEvents: hidden ? "none" : "auto",
+                  pointerEvents: hidden || disabled ? "none" : "auto",
                   touchAction: "none",
                 }}
-                onPointerDown={(e) => { if (!isPlaced) handlePointerDown(e, idx, null); }}
+                onPointerDown={(e) => { if (!isPlaced && !disabled) handlePointerDown(e, idx, null); }}
               >
-                {trayTile(s, idx)}
+                {trayTile(s, idx, gridTrayTile, gridTrayScale)}
               </div>
             );
           })}
@@ -917,13 +1181,15 @@ function PlayBoardInner(props: PlayBoardProps, ref: React.Ref<PlayBoardHandle>) 
           if (!inTray(idx)) return null; // starter pinned / filtered out
           const isPlaced = placedSuspects.has(idx);
           const isDragging = dragState?.idx === idx;
+          const disabled = isTrayDisabled(idx);
           return (
             <div
               key={s.name}
               style={{
                 width: isPlaced || isDragging ? 0 : trayTileSize,
                 height: trayTileSize,
-                opacity: isPlaced || isDragging ? 0 : 1,
+                opacity: isPlaced || isDragging ? 0 : disabled ? 0.4 : 1,
+                filter: disabled && !(isPlaced || isDragging) ? "grayscale(1)" : undefined,
                 marginLeft: isPlaced || isDragging ? 0 : trayGap / 2,
                 marginRight: isPlaced || isDragging ? 0 : trayGap / 2,
                 transform: isPlaced || isDragging ? "scale(0.5)" : "scale(1)",
@@ -931,10 +1197,11 @@ function PlayBoardInner(props: PlayBoardProps, ref: React.Ref<PlayBoardHandle>) 
                 overflow: isPlaced || isDragging ? "hidden" : "visible",
                 flexShrink: 0,
                 touchAction: "none",
+                pointerEvents: disabled ? "none" : undefined,
               }}
-              onPointerDown={(e) => { if (!isPlaced) handlePointerDown(e, idx, null); }}
+              onPointerDown={(e) => { if (!isPlaced && !disabled) handlePointerDown(e, idx, null); }}
             >
-              {trayTile(s, idx)}
+              {trayTile(s, idx, trayTileSize, cellScale)}
             </div>
           );
         })}
@@ -973,7 +1240,17 @@ function PlayBoardInner(props: PlayBoardProps, ref: React.Ref<PlayBoardHandle>) 
 
             {/* Board shadow wrapper */}
             <div className="relative" style={{ width: gridSize, height: gridSize, borderRadius: gridBorderRadius, boxShadow: `0px ${Math.max(2, 4 * cellScale)}px 0px 0px #191919` }}>
-              <div ref={gridContainerRef} className="relative size-full" style={{ touchAction: "none" }}>
+              <div
+                ref={gridContainerRef}
+                className="relative size-full"
+                style={{
+                  touchAction: "none",
+                  // During the intro the page behind the board is blacked out, so
+                  // give the grid a solid light backing — otherwise the
+                  // flashlight holes reveal the black-out instead of the board.
+                  ...(introPlay && crime != null ? { backgroundColor: "#fcfcfc", borderRadius: gridBorderRadius } : {}),
+                }}
+              >
                 {Array.from({ length: N }, (_, row) =>
                   Array.from({ length: N }, (_, col) => {
                     const roomIdx = map[row][col];
@@ -989,6 +1266,7 @@ function PlayBoardInner(props: PlayBoardProps, ref: React.Ref<PlayBoardHandle>) 
                     const hasRedOutline = placementErrors.redOutlineCells.has(cellKey);
                     const hasCrossHatch = allCrossHatchCells.has(cellKey);
                     const isStarterCell = row === starterRow && col === starterCol;
+                    const isCrimeCell = crime != null && row === crime[0] && col === crime[1];
                     const cellDimmed = isDimmed(row, col);
                     const cellHatched = hatchedCells?.has(cellKey) ?? false;
 
@@ -1059,10 +1337,11 @@ function PlayBoardInner(props: PlayBoardProps, ref: React.Ref<PlayBoardHandle>) 
                               isMurderer={won && content === level.murdererIdx}
                             />
                           )}
-                          {content === "skull" && <SkullIcon scale={cellScale} />}
+                          {content === "skull" && !hideBody && <SkullIcon scale={cellScale} />}
                           {content === "X" && <XMark scale={cellScale} />}
                           {content === "dot" && <DotMark scale={cellScale} />}
                         </div>
+                        {celebrateWin && won && content === level.murdererIdx && <PlayJailBars cellSize={cellSize} />}
                         {hasCrossHatch && !won && <RedCrossHatch />}
                         {cellHatched && <HatchStripes />}
                         {hintPendingSet && !won && hintPendingSet.has(cellKey) && (grid[row][col] === null || grid[row][col] === "dot") && <HintStripes />}
@@ -1072,7 +1351,7 @@ function PlayBoardInner(props: PlayBoardProps, ref: React.Ref<PlayBoardHandle>) 
                         {cellDimmed && (
                           <div className="absolute inset-0 pointer-events-none" style={{ backgroundColor: "rgba(0,0,0,0.6)", zIndex: 4 }} />
                         )}
-                        {activeSuspect !== null && !won && isStarterCell && (
+                        {activeSuspect !== null && !won && (isStarterCell || isCrimeCell) && (
                           <div className="absolute inset-0 pointer-events-none" style={{ backgroundColor: "rgba(0,0,0,0.15)", zIndex: 4 }} />
                         )}
                       </div>
@@ -1081,6 +1360,16 @@ function PlayBoardInner(props: PlayBoardProps, ref: React.Ref<PlayBoardHandle>) 
                 )}
                 <RoomLabels level={level} cellSize={cellSize} cellScale={cellScale} />
                 <DoorWindowOverlay level={level} cellSize={cellSize} />
+                {introPlay && crime != null && (
+                  <IntroSearchOverlay
+                    gridSize={gridSize}
+                    crimeCell={crime as [number, number]}
+                    cellSize={cellSize}
+                    borderRadius={gridBorderRadius}
+                    onDone={() => onIntroDone?.()}
+                    onPhase={setIntroPhase}
+                  />
+                )}
               </div>
             </div>
           </div>

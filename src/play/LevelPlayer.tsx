@@ -17,16 +17,37 @@ import {
   recordSolve,
   formatTime,
   LEVEL_LABEL,
+  hasSeenIntro,
+  markIntroSeen,
   type PersistedLevelState,
 } from "./storage";
 import { playUrl, shareOrCopy } from "./share";
 
 const DESKTOP_MIN = 900;
 const AVATAR_ONLY_AT_N = 7;
+// Desktop body layout (kept in sync with the JSX below): the two columns always
+// split the capped container 50/50 with a fixed gap. The board must leave room
+// for its half minus the board's own row-number labels, so it scales down by
+// width — not just height — before the portrait switch.
+const DESKTOP_BODY_PAD = 32; // px-[16px] both sides
+const DESKTOP_COL_GAP = 32; // gap-[32px]
+const DESKTOP_LABEL_W = 28; // row-number labels left of the grid
+// Boards at or above this size grow the suspect tiles to fill their column.
+const FILL_MIN_N = 7;
 
 function prefersReducedMotion(): boolean {
   try {
     return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  } catch {
+    return false;
+  }
+}
+
+// `?debug&intro` forces the "searching for the body" intro to replay.
+function forceIntro(): boolean {
+  try {
+    const p = new URLSearchParams(window.location.search);
+    return p.has("debug") && p.has("intro");
   } catch {
     return false;
   }
@@ -115,6 +136,11 @@ export default function LevelPlayer({ levelId, onBackToLanding, onSolved, onHowT
   const [hints, setHints] = useState(restored?.hints ?? 0);
   const [won, setWon] = useState(false);
   const [paused, setPaused] = useState(false);
+  // Play the flashlight intro only the first time this level is ever opened
+  // (or when forced via ?debug&intro), and never under reduced motion.
+  const [introPlaying, setIntroPlaying] = useState<boolean>(
+    () => (forceIntro() || !hasSeenIntro(levelId)) && !prefersReducedMotion(),
+  );
   const [hintData, setHintData] = useState<PlayHint | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmRestart, setConfirmRestart] = useState(false);
@@ -126,6 +152,9 @@ export default function LevelPlayer({ levelId, onBackToLanding, onSolved, onHowT
   const elapsedRef = useRef(elapsed); elapsedRef.current = elapsed;
   const hintsRef = useRef(hints); hintsRef.current = hints;
   const wonRef = useRef(false);
+  // The signature of the hint step currently on screen, so a repeat press of the
+  // SAME step isn't counted twice. Any board change clears it.
+  const hintSigRef = useRef<string>("");
 
   // Persist the in-progress board (not called once solved — that state is wiped).
   const persist = useCallback(() => {
@@ -144,6 +173,7 @@ export default function LevelPlayer({ levelId, onBackToLanding, onSolved, onHowT
     setGridMirror(g);
     setHistoryLen(history.length);
     setHintData(null);
+    hintSigRef.current = "";
     persist();
   }, [persist]);
 
@@ -156,19 +186,25 @@ export default function LevelPlayer({ levelId, onBackToLanding, onSolved, onHowT
     setWon(true);
     setHintData(null);
     setMenuOpen(false);
-    const delay = prefersReducedMotion() ? 0 : 1500;
+    const delay = prefersReducedMotion() ? 0 : 2000;
     window.setTimeout(() => onSolved(result), delay);
   }, [levelId, onSolved]);
 
-  // Timer: ticks each second while playing (not paused, not won, not suspended).
+  // Timer: ticks each second while playing (not paused, not won, not suspended,
+  // not while the intro is running).
   useEffect(() => {
-    if (paused || won || suspended) return;
+    if (paused || won || suspended || introPlaying) return;
     const t = window.setInterval(() => {
       setElapsed((e) => { const n = e + 1; elapsedRef.current = n; return n; });
       persist();
     }, 1000);
     return () => window.clearInterval(t);
-  }, [paused, won, suspended, persist]);
+  }, [paused, won, suspended, introPlaying, persist]);
+
+  // Mark this level's intro as seen on first mount so it won't replay next time.
+  useEffect(() => {
+    markIntroSeen(levelId);
+  }, [levelId]);
 
   // Auto-pause when the tab is hidden or the page is left.
   useEffect(() => {
@@ -179,11 +215,20 @@ export default function LevelPlayer({ levelId, onBackToLanding, onSolved, onHowT
 
   const handleHint = () => {
     if (won) return;
-    if (hintData) { setHintData(null); return; }
-    const h = computeHint(level, gridRef.current, suspectNames);
-    setHintData(h);
-    setHints((n) => { const v = n + 1; hintsRef.current = v; return v; });
+    // Show the next step's full hint. Count it only when it's a new step, so
+    // pressing Hint again on the same situation doesn't inflate the count.
+    const { hint, signature } = computeHint(level, gridRef.current, suspectNames, specs);
+    setHintData(hint);
+    if (signature !== hintSigRef.current) {
+      hintSigRef.current = signature;
+      setHints((n) => { const v = n + 1; hintsRef.current = v; return v; });
+    }
     persist();
+  };
+
+  const dismissHint = () => {
+    setHintData(null);
+    hintSigRef.current = "";
   };
 
   const handleUndo = () => {
@@ -205,6 +250,7 @@ export default function LevelPlayer({ levelId, onBackToLanding, onSolved, onHowT
     setElapsed(0);
     setHints(0);
     setHintData(null);
+    hintSigRef.current = "";
     setConfirmRestart(false);
     setMenuOpen(false);
     setPaused(false);
@@ -254,12 +300,14 @@ export default function LevelPlayer({ levelId, onBackToLanding, onSolved, onHowT
       const chrome = 56; // single top bar
       const labelAllow = 44;
       if (desktop) {
-        // Board fits the viewport height; the two columns sit together inside a
-        // capped, centred container, so the board no longer tracks viewport
-        // width — just height, with a sensible cap that leaves room beside it
-        // for the fixed-width suspect/clue column.
+        // The board is capped by viewport height, but ALSO by its half of the
+        // body — the two columns always split the capped container 50/50, so the
+        // board never shoves the suspect area off-screen. It scales down smoothly
+        // until the portrait layout takes over below DESKTOP_MIN.
         const availH = h - chrome - 40 - labelAllow;
-        setGridSize(Math.max(240, Math.min(availH, 440)));
+        const containerW = Math.min(w - DESKTOP_BODY_PAD, 1200);
+        const availW = (containerW - DESKTOP_COL_GAP) / 2 - DESKTOP_LABEL_W;
+        setGridSize(Math.max(240, Math.min(availH, availW, 560)));
       } else {
         // Shrink the board just enough that the inline tray and the full clue
         // list fit under it when they can; fall back to a 200px floor + scroll.
@@ -278,6 +326,25 @@ export default function LevelPlayer({ levelId, onBackToLanding, onSolved, onHowT
     return () => window.removeEventListener("resize", update);
   }, []);
 
+  // Grow the tray tiles to fill the available width: on desktop they always
+  // fill the suspect column; on mobile only the bigger levels fill the board
+  // width (the smaller board keeps its default inline tray). The clue list below
+  // is simply pushed down. The grid tray gap is 12×(tile/64), so solve
+  // fillW = tile·(cols + 0.1875·(cols−1)).
+  const [trayTilePx, setTrayTilePx] = useState<number | undefined>(undefined);
+  useLayoutEffect(() => {
+    if (!isDesktop && N < FILL_MIN_N) { setTrayTilePx(undefined); return; }
+    const compute = () => {
+      const fillW = isDesktop ? (trayEl?.clientWidth ?? 360) : gridSize;
+      const denom = trayColumns + 0.1875 * (trayColumns - 1);
+      const maxTile = isDesktop ? 200 : 96;
+      setTrayTilePx(Math.max(56, Math.min(maxTile, Math.floor(fillW / denom))));
+    };
+    compute();
+    window.addEventListener("resize", compute);
+    return () => window.removeEventListener("resize", compute);
+  }, [isDesktop, trayEl, gridSize, trayColumns, N]);
+
   const board = (
     <PlayBoard
       key={boardKey}
@@ -287,15 +354,20 @@ export default function LevelPlayer({ levelId, onBackToLanding, onSolved, onHowT
       showNameOnBoard={showNameOnBoard}
       initialGrid={initialGridRef.current}
       initialHistory={initialHistoryRef.current}
-      locked={won || paused}
+      locked={won || paused || introPlaying}
       won={won}
+      allowTray={!introPlaying}
       trayPortal={isDesktop ? trayEl : null}
       trayColumns={trayColumns}
       trayShelf={!isDesktop}
+      trayTilePx={trayTilePx}
       hintCells={hintData?.cells}
       hintPendingCells={hintData?.pendingCells}
       onChange={handleBoardChange}
       onWin={handleWin}
+      introPlay={introPlaying}
+      onIntroDone={() => setIntroPlaying(false)}
+      celebrateWin
     />
   );
 
@@ -322,12 +394,21 @@ export default function LevelPlayer({ levelId, onBackToLanding, onSolved, onHowT
 
   return (
     <div className="fixed inset-0 flex flex-col bg-[#fcfcfc]" style={{ zIndex: 10001 }}>
+      {/* Full-screen black-out during the intro so only the searched board shows.
+          Tap anywhere to skip. The board column is raised above this. */}
+      {introPlaying && (
+        <div
+          className="fixed inset-0 bg-black"
+          style={{ zIndex: 9000 }}
+          onPointerDown={() => setIntroPlaying(false)}
+        />
+      )}
       {/* Single top bar: pale background, no title, no knife.
           Left: back, pause, timer. Right: undo, hint, ••• (Share lives there).
           Items capped to the 1000px game-area width, centred. */}
       <div className="h-[56px] shrink-0 w-full bg-[#e6ebed] relative">
         <div aria-hidden="true" className="absolute inset-0 border-b border-[#678893] pointer-events-none" />
-        <div className="h-full w-full max-w-[1000px] mx-auto flex items-center px-[12px] gap-[8px] relative">
+        <div className="h-full w-full max-w-[1200px] mx-auto flex items-center px-[12px] gap-[8px] relative">
           <button onClick={onBackToLanding} aria-label="Back to levels" className="w-[36px] h-[36px] flex items-center justify-center bg-transparent border-none cursor-pointer p-0 shrink-0">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M15 18L9 12L15 6" stroke="#01394b" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" /></svg>
           </button>
@@ -359,14 +440,14 @@ export default function LevelPlayer({ levelId, onBackToLanding, onSolved, onHowT
       {/* Body */}
       {isDesktop ? (
         <div className="flex-1 min-h-0 flex justify-center overflow-hidden relative">
-          <div className="flex gap-[24px] items-start justify-center w-full max-w-[1000px] px-[16px] pt-[20px] min-h-0">
-            <div className="shrink-0 flex flex-col items-center" id="play-board-col">
+          <div className="flex gap-[32px] items-start w-full max-w-[1200px] px-[16px] pt-[20px] min-h-0">
+            <div className="flex-1 basis-0 min-w-0 flex flex-col items-center" id="play-board-col" style={introPlaying ? { position: "relative", zIndex: 9001 } : undefined}>
               {board}
             </div>
-            <div className="w-[380px] shrink-0 flex flex-col overflow-y-auto gap-[16px] max-h-full">
+            <div className="flex-1 basis-0 min-w-0 flex flex-col overflow-y-auto gap-[16px] max-h-full">
               <div ref={setTrayEl} className="shrink-0" />
               <div aria-hidden="true" className="shrink-0 border-t border-[#678893]" />
-              {hintData && <HintBanner text={hintData.text} />}
+              {hintData && <HintBanner text={hintData.text} onDismiss={dismissHint} />}
               {clueList}
             </div>
           </div>
@@ -374,12 +455,12 @@ export default function LevelPlayer({ levelId, onBackToLanding, onSolved, onHowT
         </div>
       ) : (
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden relative">
-          <div className="shrink-0 flex flex-col items-center pt-[8px]" id="play-board-col">
+          <div className="shrink-0 flex flex-col items-center pt-[8px]" id="play-board-col" style={introPlaying ? { position: "relative", zIndex: 9001 } : undefined}>
             {board}
           </div>
           <div className="flex-1 min-h-0 overflow-y-auto w-full flex justify-center">
             <div className="w-full max-w-[460px] px-[16px] pt-[8px] pb-[16px] flex flex-col gap-[12px]">
-              {hintData && <HintBanner text={hintData.text} />}
+              {hintData && <HintBanner text={hintData.text} onDismiss={dismissHint} />}
               {clueList}
             </div>
           </div>
@@ -404,9 +485,16 @@ export default function LevelPlayer({ levelId, onBackToLanding, onSolved, onHowT
   );
 }
 
-function HintBanner({ text }: { text: string }) {
+function HintBanner({ text, onDismiss }: { text: string; onDismiss: () => void }) {
   return (
-    <div className="relative w-full rounded-[8px] bg-[#e6ebed] border border-[#678893] px-[12px] py-[10px] shrink-0">
+    <div className="relative w-full rounded-[8px] bg-[#e6ebed] border border-[#678893] pl-[12px] pr-[36px] py-[10px] shrink-0">
+      <button
+        onClick={onDismiss}
+        aria-label="Dismiss hint"
+        className="absolute right-[8px] top-[8px] w-[22px] h-[22px] flex items-center justify-center bg-transparent border-none cursor-pointer p-0"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="#4a5b62" strokeWidth="2" strokeLinecap="round" /></svg>
+      </button>
       <p className="font-['Inter:Semi_Bold',sans-serif] font-semibold text-[14px] text-black" style={{ lineHeight: 1.35 }}>{text}</p>
     </div>
   );

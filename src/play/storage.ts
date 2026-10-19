@@ -26,6 +26,7 @@ export type ProgressMap = Partial<Record<LevelId, LevelProgress>>;
 
 const PROGRESS_KEY = `${STORAGE_PREFIX}progress`;
 const TUTORIAL_SEEN_KEY = `${STORAGE_PREFIX}tutorial-seen`;
+const INTRO_SEEN_KEY = `${STORAGE_PREFIX}intro-seen`;
 const levelStateKey = (id: LevelId): string => `${STORAGE_PREFIX}state-${id}`;
 
 // ── Raw access (never throws) ───────────────────────────────────────────────
@@ -129,6 +130,30 @@ export function getTutorialSeen(): boolean {
 }
 export function setTutorialSeen(seen: boolean): void {
   writeRaw(TUTORIAL_SEEN_KEY, seen ? "true" : "false");
+}
+
+// ── Intro "searching for the body" animation seen flag (per level) ──────────
+// The intro plays only the first time a player ever opens a given level. We
+// persist the set of seen level ids; a missing/corrupt value reads as "none
+// seen" so the worst case is simply replaying the intro, never a crash.
+function readSeenIntroSet(): Set<string> {
+  const raw = readRaw(INTRO_SEEN_KEY);
+  if (!raw) return new Set();
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? new Set(parsed.filter((x): x is string => typeof x === "string")) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+export function hasSeenIntro(id: LevelId): boolean {
+  return readSeenIntroSet().has(id);
+}
+export function markIntroSeen(id: LevelId): void {
+  const set = readSeenIntroSet();
+  if (set.has(id)) return;
+  set.add(id);
+  writeRaw(INTRO_SEEN_KEY, JSON.stringify([...set]));
 }
 
 // ── In-progress board state (shape finalised in Phase 4) ────────────────────

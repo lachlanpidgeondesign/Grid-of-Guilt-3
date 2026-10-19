@@ -2,16 +2,15 @@
 //
 // Seven steps on a dedicated 5×5 board + cast (Adam, Tom, Ruby, Kate, Eve),
 // built on the shared PlayBoard with its tutorial overlay props (dimmed /
-// hatched / X-only / canPlace veto). The board owns its grid across steps 1–6
-// (no remount) so the X's the player places carry forward; step 7 remounts with
-// the solved + revealed board. Pure placement logic lives in tutorialGuard.ts.
+// hatched / X-only). The board owns its grid across steps 1–6 (no remount) so
+// the X's the player places carry forward; step 7 remounts with the solved +
+// revealed board. Steps 5–6 place suspects freely and show the real game's
+// row / column / adjacency error marks; the reveal fires on PlayBoard's win.
 //
-// Mobile stacks top-to-bottom; from 900px it splits into a board column and a
-// text + tray + clue column (step text above the tray), matching the level
-// player.
+// Single column on every screen, capped to the 500px content width.
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import PlayBoard, { type CellContent } from "../app/shared/PlayBoard";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import PlayBoard, { getPlacementErrors, type CellContent } from "../app/shared/PlayBoard";
 import type { RoomPalette } from "../app/generator/puzzleGenerator";
 import ClueContent from "./ClueRow";
 import { clueDisplayOrder } from "./clueOrder";
@@ -22,7 +21,6 @@ import {
   TUTORIAL_CAST_NAMES,
   TUTORIAL_CAST_COLORS,
 } from "./tutorialLevel";
-import { tutorialGuard } from "./tutorialGuard";
 
 const N = TUTORIAL_LEVEL.N;
 const ADAM = 0, TOM = 1, RUBY = 2, KATE = 3, EVE = 4;
@@ -116,34 +114,33 @@ export default function TutorialScreen({ onFinish }: TutorialScreenProps) {
   const [step, setStep] = useState(1);
   const [grid, setGrid] = useState<CellContent[][]>(() => buildInitialGrid());
   const [boardKey, setBoardKey] = useState(0);
-  const [veto, setVeto] = useState<string | null>(null);
-  const [shake, setShake] = useState(false);
   const [gridSize, setGridSize] = useState(320);
-  const vetoTimer = useRef<number | null>(null);
 
   const rooms = TUTORIAL_LEVEL.rooms;
   const hallRoom = rooms.find((r) => r.name === "Hall")!;
 
   // ── Responsive sizing ──────────────────────────────────────────────
-  // Single column on every screen, capped to the 500px content width.
+  // Single column, capped to the 500px content width AND to the viewport
+  // height so everything fits without scrolling. The board height is the column
+  // labels + grid + suspect tray; the tray and the clue list are ALWAYS
+  // reserved (even on steps that don't show them) so the board stays the same
+  // size on every step and the layout doesn't jump.
   useLayoutEffect(() => {
     const update = () => {
-      let w = 390;
-      try { w = window.innerWidth; } catch { /* defaults */ }
-      setGridSize(Math.max(220, Math.min(w - 48, 452)));
+      let w = 390, h = 800;
+      try { w = window.innerWidth; h = window.innerHeight; } catch { /* defaults */ }
+      const widthCap = Math.min(w - 48, 452);
+      // Board parts that scale with the grid g: column labels ≈ 15·(g/358)+12,
+      // suspect tray ≈ 88·(g/358). WORST_CHROME is the page's fixed content at
+      // its tallest step (paddings, title, subtitle, tip and the 4-clue list).
+      const perG = 1 + (15 + 88) / 358; // ≈ 1.288
+      const WORST_CHROME = 384;
+      const heightCap = (h - WORST_CHROME - 12) / perG;
+      setGridSize(Math.max(220, Math.min(widthCap, heightCap, 452)));
     };
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
-  }, []);
-
-  const showVeto = useCallback((msg: string | null) => {
-    if (msg) setVeto(msg);
-    setShake(true);
-    if (vetoTimer.current) window.clearTimeout(vetoTimer.current);
-    const hold = prefersReducedMotion() ? 1200 : 1800;
-    vetoTimer.current = window.setTimeout(() => { setVeto(null); setShake(false); }, hold);
-    window.setTimeout(() => setShake(false), prefersReducedMotion() ? 0 : 360);
   }, []);
 
   // ── Auto-advance for the X-marking rule steps (2–4) ─────────────────
@@ -175,31 +172,24 @@ export default function TutorialScreen({ onFinish }: TutorialScreenProps) {
     xOnlyCells = new Set(hatchForStep);
   }
 
-  // ── Placement guard (steps 5–6) ─────────────────────────────────────
-  const canPlace = useCallback((idx: number, r: number, c: number): boolean | string => {
-    if (step === 5) {
-      if (idx !== TOM) return `${TUTORIAL_CAST_NAMES[idx]} comes later — place Tom first.`;
-      return tutorialGuard(grid, TOM, r, c, [TOM]);
-    }
-    if (step === 6) {
-      return tutorialGuard(grid, idx, r, c, [RUBY, KATE, EVE]);
-    }
-    return true;
-  }, [step, grid]);
-
+  // ── Free placement (steps 5–6) ──────────────────────────────────────
+  // Steps 5 and 6 behave like the real game: suspects go anywhere and the
+  // board draws its own row / column / adjacency error marks. The reveal only
+  // fires once every suspect is placed correctly (PlayBoard's win check).
   const handleChange = useCallback((g: CellContent[][]) => {
     setGrid(g.map((row) => [...row]));
   }, []);
 
-  const handleVeto = useCallback((message: string | null) => {
-    showVeto(message);
-  }, [showVeto]);
-
-  // Step 5 advances when Tom is placed; the board reports it via onChange.
+  // Step 5 advances once Tom is in the Hall (clue true) with no rule error.
+  // He can go in any valid Hall cell — we never force a single square.
   useEffect(() => {
     if (step !== 5) return;
-    const placed = grid.some((row) => row.includes(TOM));
-    if (placed) setStep(6);
+    let tomPos: [number, number] | null = null;
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (grid[r][c] === TOM) tomPos = [r, c];
+    if (!tomPos) return;
+    if (!TUTORIAL_LEVEL.clues[TOM].check(tomPos[0], tomPos[1])) return;
+    if (getPlacementErrors(grid, N, TUTORIAL_LEVEL.map).hasError) return;
+    setStep(6);
   }, [grid, step]);
 
   const handleWin = useCallback(() => {
@@ -228,11 +218,12 @@ export default function TutorialScreen({ onFinish }: TutorialScreenProps) {
 
   const showTray = step === 5 || step === 6;
   const showClues = step === 5 || step === 6;
-  // Step 5 offers Tom only; step 6 offers the remaining three.
-  const trayIdxs = step === 5 ? [TOM] : step === 6 ? [RUBY, KATE, EVE] : undefined;
+  // Step 5 shows all four, but only Tom is active; step 6 offers the remaining three.
+  const trayIdxs = step === 5 ? [TOM, RUBY, KATE, EVE] : step === 6 ? [RUBY, KATE, EVE] : undefined;
+  const trayDisabledIdxs = step === 5 ? [RUBY, KATE, EVE] : undefined;
 
   const board = (
-    <div className={shake ? "puzzle-shake" : undefined}>
+    <div>
       <PlayBoard
         key={boardKey}
         level={TUTORIAL_LEVEL}
@@ -246,13 +237,12 @@ export default function TutorialScreen({ onFinish }: TutorialScreenProps) {
         trayColumns={step === 6 ? 3 : 4}
         trayShelf
         traySuspectIdxs={trayIdxs}
+        trayDisabledIdxs={trayDisabledIdxs}
         dimmedCells={dimmedCells}
         hatchedCells={hatchedCells}
         xOnlyCells={xOnlyCells ?? null}
-        canPlace={canPlace}
         onChange={handleChange}
         onWin={handleWin}
-        onVeto={handleVeto}
       />
     </div>
   );
@@ -360,18 +350,12 @@ export default function TutorialScreen({ onFinish }: TutorialScreenProps) {
           {title}
           {subtitleEl}
           {board}
-          <div className="w-full flex flex-col gap-[14px]">
+          <div className="flex flex-col gap-[14px]" style={{ width: gridSize }}>
             {belowBoard}
             {clueList}
           </div>
         </div>
       </div>
-
-      {veto && (
-        <div className="fixed left-1/2 -translate-x-1/2 bottom-[28px] bg-[#191919] text-[#fcfcfc] text-[14px] font-['Inter:Semi_Bold',sans-serif] font-semibold rounded-[8px] px-[16px] py-[10px] text-center" style={{ zIndex: 10010, maxWidth: "88%" }}>
-          {veto}
-        </div>
-      )}
     </div>
   );
 }
