@@ -1,0 +1,376 @@
+{
+  "N": 9,
+  "map": [
+    [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      2,
+      0
+    ],
+    [
+      1,
+      5,
+      3,
+      1,
+      3,
+      1,
+      1,
+      2,
+      2
+    ],
+    [
+      5,
+      5,
+      3,
+      3,
+      3,
+      3,
+      3,
+      2,
+      2
+    ],
+    [
+      5,
+      5,
+      5,
+      6,
+      3,
+      3,
+      4,
+      4,
+      2
+    ],
+    [
+      5,
+      5,
+      5,
+      6,
+      4,
+      4,
+      4,
+      4,
+      4
+    ],
+    [
+      7,
+      5,
+      5,
+      6,
+      6,
+      6,
+      6,
+      6,
+      4
+    ],
+    [
+      7,
+      7,
+      6,
+      6,
+      6,
+      8,
+      6,
+      6,
+      4
+    ],
+    [
+      7,
+      7,
+      8,
+      8,
+      8,
+      8,
+      8,
+      8,
+      4
+    ],
+    [
+      8,
+      8,
+      8,
+      8,
+      8,
+      8,
+      8,
+      8,
+      4
+    ]
+  ],
+  "rooms": [
+    {
+      "name": "Library",
+      "fill": "#2E5CB8",
+      "dark": "#1A3A7A"
+    },
+    {
+      "name": "Ballroom",
+      "fill": "#E74C3C",
+      "dark": "#A93226"
+    },
+    {
+      "name": "Kitchen",
+      "fill": "#F39C12",
+      "dark": "#B8740F"
+    },
+    {
+      "name": "Study",
+      "fill": "#9B59B6",
+      "dark": "#6C3A6F"
+    },
+    {
+      "name": "Wine Cellar",
+      "fill": "#1ABC9C",
+      "dark": "#117A65"
+    },
+    {
+      "name": "Trophy Room",
+      "fill": "#3498DB",
+      "dark": "#2E86C1"
+    },
+    {
+      "name": "Conservatory",
+      "fill": "#E67E22",
+      "dark": "#BA4A00"
+    },
+    {
+      "name": "Billiard Room",
+      "fill": "#27AE60",
+      "dark": "#1E8449"
+    },
+    {
+      "name": "Gallery",
+      "fill": "#34495E",
+      "dark": "#1F2E3C"
+    }
+  ],
+  "suspects": [
+    {
+      "name": "E. Crane",
+      "id": "EC"
+    },
+    {
+      "name": "L. Morrow",
+      "id": "LM"
+    },
+    {
+      "name": "R. Holt",
+      "id": "RH"
+    },
+    {
+      "name": "V. Dusk",
+      "id": "VD"
+    },
+    {
+      "name": "A. Wren",
+      "id": "AW"
+    },
+    {
+      "name": "O. Pryce",
+      "id": "OP"
+    },
+    {
+      "name": "N. Fenn",
+      "id": "NF"
+    },
+    {
+      "name": "J. Vale",
+      "id": "JV"
+    },
+    {
+      "name": "C. Moss",
+      "id": "CM"
+    }
+  ],
+  "sol": [
+    [
+      0,
+      8
+    ],
+    [
+      1,
+      5
+    ],
+    [
+      2,
+      7
+    ],
+    [
+      3,
+      4
+    ],
+    [
+      4,
+      6
+    ],
+    [
+      5,
+      1
+    ],
+    [
+      6,
+      3
+    ],
+    [
+      7,
+      0
+    ],
+    [
+      8,
+      2
+    ]
+  ],
+  "murdererIdx": 8,
+  "starterIdx": 5,
+  "crimeSceneCell": [
+    6,
+    5
+  ],
+  "clues": [
+    {
+      "type": "corner",
+      "text": "Was spotted in <em>a corner</em> of the manor.",
+      "check": "(tr,tc)=>(tr===0||tr===N-1)&&(tc===0||tc===N-1)"
+    },
+    {
+      "type": "near-door",
+      "text": "Was seen lingering near a <em>doorway</em>.",
+      "check": "(tr,tc)=>nearDoor===doorCells.has(`${tr},${tc}`)"
+    },
+    {
+      "type": "near-window",
+      "text": "Was <em>nowhere near any windows</em>.",
+      "check": "(tr,tc)=>nearWindow===windowCells.has(`${tr},${tc}`)"
+    },
+    {
+      "type": "room",
+      "text": "Was confirmed in the <em>Study</em> all evening.",
+      "check": "(tr,tc)=>map[tr][tc]===room"
+    },
+    {
+      "type": "room",
+      "text": "Was confirmed in the <em>Wine Cellar</em> all evening.",
+      "check": "(tr,tc)=>map[tr][tc]===room"
+    },
+    {
+      "type": "near-window",
+      "text": "Was <em>nowhere near any windows</em>.",
+      "check": "(tr,tc)=>nearWindow===windowCells.has(`${tr},${tc}`)"
+    },
+    {
+      "type": "room",
+      "text": "Was confirmed in the <em>Conservatory</em> all evening.",
+      "check": "(tr,tc)=>map[tr][tc]===room"
+    },
+    {
+      "type": "near-window",
+      "text": "Was spotted near a <em>window</em>.",
+      "check": "(tr,tc)=>nearWindow===windowCells.has(`${tr},${tc}`)"
+    },
+    {
+      "type": "edge",
+      "text": "Was seen near the <em>outer walls</em> of the manor.",
+      "check": "(tr,tc)=>tr===0||tr===N-1||tc===0||tc===N-1"
+    }
+  ],
+  "orderedIdxs": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "doors": [
+    {
+      "r": 5,
+      "c": 0,
+      "dir": "right"
+    },
+    {
+      "r": 0,
+      "c": 4,
+      "dir": "down"
+    },
+    {
+      "r": 1,
+      "c": 4,
+      "dir": "right"
+    },
+    {
+      "r": 1,
+      "c": 0,
+      "dir": "down"
+    },
+    {
+      "r": 7,
+      "c": 0,
+      "dir": "down"
+    },
+    {
+      "r": 1,
+      "c": 6,
+      "dir": "right"
+    }
+  ],
+  "windows": [
+    {
+      "r": 5,
+      "c": 0,
+      "side": "left"
+    },
+    {
+      "r": 2,
+      "c": 0,
+      "side": "left"
+    },
+    {
+      "r": 0,
+      "c": 7,
+      "side": "top"
+    },
+    {
+      "r": 8,
+      "c": 6,
+      "side": "bottom"
+    },
+    {
+      "r": 7,
+      "c": 0,
+      "side": "left"
+    },
+    {
+      "r": 1,
+      "c": 8,
+      "side": "right"
+    }
+  ],
+  "doorCells": [
+    "0,4",
+    "1,0",
+    "1,4",
+    "1,5",
+    "1,6",
+    "1,7",
+    "2,0",
+    "5,0",
+    "5,1",
+    "7,0",
+    "8,0"
+  ],
+  "windowCells": [
+    "0,7",
+    "1,8",
+    "2,0",
+    "5,0",
+    "7,0",
+    "8,6"
+  ]
+}

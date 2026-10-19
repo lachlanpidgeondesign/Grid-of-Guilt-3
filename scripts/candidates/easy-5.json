@@ -1,0 +1,197 @@
+{
+  "N": 5,
+  "map": [
+    [
+      1,
+      1,
+      0,
+      0,
+      2
+    ],
+    [
+      1,
+      1,
+      1,
+      2,
+      2
+    ],
+    [
+      3,
+      3,
+      1,
+      2,
+      4
+    ],
+    [
+      3,
+      3,
+      3,
+      3,
+      4
+    ],
+    [
+      3,
+      3,
+      4,
+      4,
+      4
+    ]
+  ],
+  "rooms": [
+    {
+      "name": "Library",
+      "fill": "#2E5CB8",
+      "dark": "#1A3A7A"
+    },
+    {
+      "name": "Ballroom",
+      "fill": "#E74C3C",
+      "dark": "#A93226"
+    },
+    {
+      "name": "Kitchen",
+      "fill": "#F39C12",
+      "dark": "#B8740F"
+    },
+    {
+      "name": "Study",
+      "fill": "#9B59B6",
+      "dark": "#6C3A6F"
+    },
+    {
+      "name": "Wine Cellar",
+      "fill": "#1ABC9C",
+      "dark": "#117A65"
+    }
+  ],
+  "suspects": [
+    {
+      "name": "E. Crane",
+      "id": "EC"
+    },
+    {
+      "name": "L. Morrow",
+      "id": "LM"
+    },
+    {
+      "name": "R. Holt",
+      "id": "RH"
+    },
+    {
+      "name": "V. Dusk",
+      "id": "VD"
+    },
+    {
+      "name": "A. Wren",
+      "id": "AW"
+    }
+  ],
+  "sol": [
+    [
+      0,
+      2
+    ],
+    [
+      1,
+      0
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      3,
+      1
+    ],
+    [
+      4,
+      4
+    ]
+  ],
+  "murdererIdx": 4,
+  "starterIdx": 3,
+  "crimeSceneCell": [
+    2,
+    4
+  ],
+  "clues": [
+    {
+      "type": "room",
+      "text": "Was confirmed in the <em>Library</em> all evening.",
+      "check": "(tr,tc)=>map[tr][tc]===room"
+    },
+    {
+      "type": "edge",
+      "text": "Was seen near the <em>outer walls</em> of the manor.",
+      "check": "(tr,tc)=>tr===0||tr===N-1||tc===0||tc===N-1"
+    },
+    {
+      "type": "near-door",
+      "text": "Was seen lingering near a <em>doorway</em>.",
+      "check": "(tr,tc)=>nearDoor===doorCells.has(`${tr},${tc}`)"
+    },
+    {
+      "type": "near-window",
+      "text": "Was <em>nowhere near any windows</em>.",
+      "check": "(tr,tc)=>nearWindow===windowCells.has(`${tr},${tc}`)"
+    },
+    {
+      "type": "corner",
+      "text": "Was spotted in <em>a corner</em> of the manor.",
+      "check": "(tr,tc)=>(tr===0||tr===N-1)&&(tc===0||tc===N-1)"
+    }
+  ],
+  "orderedIdxs": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "doors": [
+    {
+      "r": 2,
+      "c": 3,
+      "dir": "down"
+    },
+    {
+      "r": 3,
+      "c": 3,
+      "dir": "down"
+    },
+    {
+      "r": 1,
+      "c": 0,
+      "dir": "down"
+    }
+  ],
+  "windows": [
+    {
+      "r": 4,
+      "c": 4,
+      "side": "bottom"
+    },
+    {
+      "r": 0,
+      "c": 4,
+      "side": "right"
+    },
+    {
+      "r": 4,
+      "c": 2,
+      "side": "bottom"
+    }
+  ],
+  "doorCells": [
+    "1,0",
+    "2,0",
+    "2,3",
+    "3,3",
+    "4,3"
+  ],
+  "windowCells": [
+    "0,4",
+    "4,2",
+    "4,4"
+  ]
+}

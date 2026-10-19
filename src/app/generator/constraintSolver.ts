@@ -39,11 +39,12 @@ export function countSolutions(
   cap = 2,
   stepBudget?: number,
 ): CountResult {
-  const { N, map, clues, starterIdx, sol } = level;
+  const { N, map, clues, starterIdx, sol, crimeSceneCell } = level;
   const budget = stepBudget ?? (N <= 5 ? 200_000 : N <= 7 ? 1_000_000 : 4_000_000);
 
   // Per-suspect candidate cells: every cell whose clue holds for that suspect.
-  // The starter is pinned to exactly its solution cell.
+  // The starter is pinned to exactly its solution cell. The body's cell is
+  // never a candidate for anyone — no suspect can stand on the crime scene.
   const candidates: Array<Array<[number, number]>> = [];
   for (let si = 0; si < N; si++) {
     if (si === starterIdx) {
@@ -53,6 +54,7 @@ export function countSolutions(
     const list: Array<[number, number]> = [];
     for (let r = 0; r < N; r++) {
       for (let c = 0; c < N; c++) {
+        if (crimeSceneCell && r === crimeSceneCell[0] && c === crimeSceneCell[1]) continue;
         if (clues[si].check(r, c)) list.push([r, c]);
       }
     }
@@ -270,8 +272,8 @@ interface PropState {
   contradiction: boolean;
 }
 
-function psCreate(level: Pick<GeneratedLevel, "N" | "map" | "clues">): PropState {
-  const { N, map, clues } = level;
+function psCreate(level: Pick<GeneratedLevel, "N" | "map" | "clues" | "crimeSceneCell">): PropState {
+  const { N, map, clues, crimeSceneCell } = level;
   const cellSuspects: Array<Array<Set<number>>> = [];
   for (let r = 0; r < N; r++) {
     const row: Array<Set<number>> = [];
@@ -282,11 +284,20 @@ function psCreate(level: Pick<GeneratedLevel, "N" | "map" | "clues">): PropState
     }
     cellSuspects.push(row);
   }
+  const state = Array.from({ length: N }, () => new Array<number>(N).fill(UNKNOWN));
+  // The body's cell can never hold a suspect: start it with no candidates and
+  // mark it empty, so row/column/room "single" deductions see it as
+  // unoccupiable from the very first pass.
+  if (crimeSceneCell) {
+    const [cr, cc] = crimeSceneCell;
+    cellSuspects[cr][cc].clear();
+    state[cr][cc] = EMPTY;
+  }
   return {
     N,
     map,
     cellSuspects,
-    state: Array.from({ length: N }, () => new Array<number>(N).fill(UNKNOWN)),
+    state,
     occupant: Array.from({ length: N }, () => new Array<number>(N).fill(-1)),
     suspectCell: new Array<[number, number] | null>(N).fill(null),
     order: [],
@@ -625,11 +636,14 @@ export function nextHintFromBoard(level: GeneratedLevel, board: HintBoardCell[][
   // Candidate model for clue-based steps: which UNPLACED suspects can still
   // occupy each placeable cell (clue holds and no occupied cell forbids it).
   // Dotted cells are placeable, so they get candidates too — that is what lets
-  // occupant resolution name a dot.
+  // occupant resolution name a dot. The body's cell is never placeable (in the
+  // live board it carries the skull; this guard also covers callers that omit
+  // it), so no suspect is ever a candidate there.
+  const [csR, csC] = level.crimeSceneCell ?? [-1, -1];
   const cand: Array<Array<Set<number>>> = Array.from({ length: N }, () => Array.from({ length: N }, () => new Set<number>()));
   for (let r = 0; r < N; r++) {
     for (let c = 0; c < N; c++) {
-      if (!isPlaceable(r, c) || excludedByGeometry(r, c)) continue;
+      if (!isPlaceable(r, c) || excludedByGeometry(r, c) || (r === csR && c === csC)) continue;
       for (let si = 0; si < N; si++) {
         if (placedCell[si]) continue;
         if (clues[si].check(r, c)) cand[r][c].add(si);

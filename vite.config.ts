@@ -35,6 +35,17 @@ export default defineConfig({
     },
   },
 
+  // Two entry points: the original daily game (index.html) and the new /play/
+  // app (play/index.html). The daily game's entry is unchanged.
+  build: {
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        play: path.resolve(__dirname, 'play/index.html'),
+      },
+    },
+  },
+
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
 })
